@@ -26,6 +26,7 @@ export default function Auth() {
 
     try {
       await login(email, password)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {
       setError("Falha no login. Verifique suas credenciais.")
     } finally {
@@ -44,6 +45,7 @@ export default function Auth() {
 
     try {
       await register(email, password, name)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {
       setError("Falha no registro. Tente novamente.")
     } finally {

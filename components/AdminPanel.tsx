@@ -1,106 +1,90 @@
-"use client"
+"use [v0-no-op-code-block-prefix]client"
 
 import { useState, useEffect } from "react"
-import { useAuth } from "@/contexts/AuthContext"
-import { db } from "@/lib/firebase"
-import { collection, query, where, getDocs, doc, updateDoc, DocumentData } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { db, auth } from "@/lib/firebase"
+import { collection, getDocs, query, updateDoc, doc, deleteDoc } from "firebase/firestore"
+import { UserInfo } from "firebase/auth"
+import { Shield, Trash2, UserPlus } from "lucide-react"
 
-interface User {
-  id: string
-  name: string
-  email: string
-  status: "pending" | "approved" | "rejected"
-  role: "user" | "admin"
+interface FirebaseUser extends UserInfo {
+  role?: string
 }
 
 export default function AdminPanel() {
-  const [users, setUsers] = useState<User[]>([])
-  const { isAdmin } = useAuth()
+  const [users, setUsers] = useState<FirebaseUser[]>([])
 
   useEffect(() => {
-    if (isAdmin) {
-      fetchUsers()
-    }
-  }, [isAdmin])
+    fetchUsers()
+  }, [])
 
   const fetchUsers = async () => {
-    const q = query(collection(db, "users"), where("status", "==", "pending"))
-    const querySnapshot = await getDocs(q)
-    const fetchedUsers: User[] = []
-    querySnapshot.forEach((doc: DocumentData) => {
-      fetchedUsers.push({ id: doc.id, ...doc.data() } as User)
-    })
+    const usersQuery = query(collection(db, "users"))
+    const usersSnapshot = await getDocs(usersQuery)
+    const fetchedUsers: FirebaseUser[] = usersSnapshot.docs.map(doc => ({
+      ...doc.data(),
+      uid: doc.id
+    } as FirebaseUser))
+    
+    // Add the current user if they're not in the database
+    const currentUser = auth.currentUser
+    if (currentUser && !fetchedUsers.some(user => user.uid === currentUser.uid)) {
+      fetchedUsers.push({
+        ...currentUser,
+        role: 'admin'
+      })
+    }
+    
     setUsers(fetchedUsers)
   }
 
-  const handleApprove = async (userId: string) => {
+  const toggleUserRole = async (userId: string, currentRole: string) => {
+    const newRole = currentRole === 'admin' ? 'user' : 'admin'
     await updateDoc(doc(db, "users", userId), {
-      status: "approved"
+      role: newRole
     })
     fetchUsers()
   }
 
-  const handleReject = async (userId: string) => {
-    await updateDoc(doc(db, "users", userId), {
-      status: "rejected"
-    })
+  const deleteUser = async (userId: string) => {
+    await deleteDoc(doc(db, "users", userId))
     fetchUsers()
-  }
-
-  const handlePromote = async (userId: string) => {
-    await updateDoc(doc(db, "users", userId), {
-      role: "admin"
-    })
-    fetchUsers()
-  }
-
-  if (!isAdmin) {
-    return <div>Acesso não autorizado</div>
   }
 
   return (
-    <Card className="w-full max-w-4xl mx-auto mt-8">
+    <Card>
       <CardHeader>
-        <CardTitle>Painel de Administração</CardTitle>
+        <CardTitle>Painel Admin</CardTitle>
       </CardHeader>
       <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.map((user) => (
-              <TableRow key={user.id}>
-                <TableCell>{user.name}</TableCell>
-                <TableCell>{user.email}</TableCell>
-                <TableCell>{user.status}</TableCell>
-                <TableCell>
-                  <div className="space-x-2">
-                    <Button onClick={() => handleApprove(user.id)} variant="outline" size="sm">
-                      Aprovar
-                    </Button>
-                    <Button onClick={() => handleReject(user.id)} variant="outline" size="sm">
-                      Rejeitar
-                    </Button>
-                    {user.role !== "admin" && (
-                      <Button onClick={() => handlePromote(user.id)} variant="outline" size="sm">
-                        Promover a Admin
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <h2 className="text-xl font-semibold mb-4">Usuários</h2>
+        <div className="space-y-2">
+          {users.map(user => (
+            <div key={user.uid} className="flex justify-between items-center p-2 bg-secondary rounded-md">
+              <div className="flex items-center space-x-2">
+                <span>{user.displayName || user.email}</span>
+                {user.role === 'admin' && <Shield className="h-4 w-4 text-primary" />}
+              </div>
+              <div className="space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => toggleUserRole(user.uid, user.role || 'user')}
+                >
+                  {user.role === 'admin' ? <UserPlus className="h-4 w-4" /> : <Shield className="h-4 w-4" />}
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => deleteUser(user.uid)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
       </CardContent>
     </Card>
   )
