@@ -1,7 +1,7 @@
 "use client"
 
-import React, { useState, useCallback, useEffect } from 'react'
-import { collection, setDoc, deleteDoc, doc, onSnapshot, updateDoc, query, where, getDoc, serverTimestamp } from 'firebase/firestore'
+import React, { useState, useEffect } from 'react'
+import { collection, setDoc, doc, onSnapshot, updateDoc, query, where, getDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -98,7 +98,7 @@ const BossTracker: React.FC = () => {
     toast.success(`Ordenado por tempo de spawn: ${newSortOrder === 'asc' ? 'crescente' : 'decrescente'}`);
   };
 
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+  const onDrop = React.useCallback(async (acceptedFiles: File[]) => {
     setIsProcessing(true)
     console.log('Starting image processing...')
     
@@ -133,7 +133,7 @@ const BossTracker: React.FC = () => {
     } finally {
       setIsProcessing(false)
     }
-  }, [])
+  }, [processBossInfo])
 
   const confirmBoss = async () => {
     if (!user) {
@@ -263,7 +263,7 @@ const BossTracker: React.FC = () => {
     }
   }
 
-  const pasteImage = useCallback(async (e: ClipboardEvent) => {
+  const pasteImage = React.useCallback(async (e: ClipboardEvent) => {
     const items = e.clipboardData?.items
     if (items) {
       for (let i = 0; i < items.length; i++) {
