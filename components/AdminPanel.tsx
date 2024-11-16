@@ -19,11 +19,37 @@ interface FirebaseUser extends UserInfo {
 
 export default function AdminPanel() {
   const [users, setUsers] = useState<FirebaseUser[]>([])
+  const [rawBosses, setRawBosses] = useState<Boss[]>([])
   const [allBosses, setAllBosses] = useState<Boss[]>([])
   const [showUsers, setShowUsers] = useState(false)
   const [showBossTracker, setShowBossTracker] = useState(false)
   const [showAllBosses, setShowAllBosses] = useState(false)
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+  const [sortBy, setSortBy] = useState<'time' | 'name' | 'channel'>('time')
   const { user, isAdmin } = useAuth()
+
+  // Efeito para ordenar bosses quando mudar sortOrder ou sortBy
+  useEffect(() => {
+    if (rawBosses.length === 0) return
+
+    const sortedBosses = [...rawBosses].sort((a, b) => {
+      if (sortBy === 'time') {
+        const timeA = new Date(a.spawnTime).getTime()
+        const timeB = new Date(b.spawnTime).getTime()
+        return sortOrder === 'asc' ? timeA - timeB : timeB - timeA
+      } else if (sortBy === 'name') {
+        const nameA = a.name.toLowerCase()
+        const nameB = b.name.toLowerCase()
+        return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA)
+      } else { // channel
+        const channelA = a.channel ? parseInt(a.channel) : 0
+        const channelB = b.channel ? parseInt(b.channel) : 0
+        return sortOrder === 'asc' ? channelA - channelB : channelB - channelA
+      }
+    })
+
+    setAllBosses(sortedBosses)
+  }, [sortOrder, sortBy, rawBosses])
 
   useEffect(() => {
     const unsubscribeUsers = subscribeToUsers()
@@ -55,8 +81,17 @@ export default function AdminPanel() {
         id: doc.id,
         ...doc.data()
       } as Boss))
-      setAllBosses(updatedBosses)
+      setRawBosses(updatedBosses)
     })
+  }
+
+  const handleSort = (newSortBy: 'time' | 'name' | 'channel') => {
+    if (newSortBy === sortBy) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(newSortBy)
+      setSortOrder('asc')
+    }
   }
 
   const toggleUserRole = async (userId: string, currentRole: string) => {
@@ -90,14 +125,6 @@ export default function AdminPanel() {
       console.error('Error deleting user:', error)
       toast.error('Erro ao remover o usuário. Tente novamente.')
     }
-  }
-
-  const handleSort = () => {
-    const sortedBosses = [...allBosses].sort((a, b) => {
-      return new Date(a.spawnTime).getTime() - new Date(b.spawnTime).getTime()
-    })
-    setAllBosses(sortedBosses)
-    toast.success('Bosses ordenados por tempo de spawn.')
   }
 
   const handleUpdateStatus = async (id: string, status: 'killed' | 'noshow') => {

@@ -14,12 +14,14 @@ import BossList from './BossList'
 import BossConfirmation from './BossConfirmation'
 import { addHours, addMinutes, subMinutes } from 'date-fns'
 import { initializeOCRWorker, processImage } from '@/app/utils/ocrProcessor'
+import { SectionHeader } from '@/components/ui/section-header'
 
 const BossTracker: React.FC = () => {
   const [bosses, setBosses] = useState<Boss[]>([])
   const [pendingBoss, setPendingBoss] = useState<Boss | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+  const [sortBy, setSortBy] = useState<'time' | 'name' | 'channel'>('time')
   const { user } = useAuth()
 
   useEffect(() => {
@@ -38,11 +40,29 @@ const BossTracker: React.FC = () => {
         lastUpdated: doc.data().lastUpdated?.toDate() || null,
         createdAt: doc.data().createdAt?.toDate() || null
       } as Boss))
-      setBosses(updatedBosses)
+
+      // Ordenar bosses
+      const sortedBosses = [...updatedBosses].sort((a, b) => {
+        if (sortBy === 'time') {
+          const timeA = new Date(a.spawnTime).getTime()
+          const timeB = new Date(b.spawnTime).getTime()
+          return sortOrder === 'asc' ? timeA - timeB : timeB - timeA
+        } else if (sortBy === 'name') {
+          const nameA = a.name.toLowerCase()
+          const nameB = b.name.toLowerCase()
+          return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA)
+        } else { // channel
+          const channelA = a.channel ? parseInt(a.channel) : 0
+          const channelB = b.channel ? parseInt(b.channel) : 0
+          return sortOrder === 'asc' ? channelA - channelB : channelB - channelA
+        }
+      })
+
+      setBosses(sortedBosses)
     })
 
     return () => unsubscribe()
-  }, [user])
+  }, [user, sortOrder, sortBy])
 
   const calculateSpawnTime = (hours: number, minutes: number): Date => {
     const now = new Date()
@@ -51,10 +71,10 @@ const BossTracker: React.FC = () => {
     return subMinutes(spawnTime, 5)
   }
 
-  const processBossInfo = (text: string): Boss | null => {
+  const processBossInfo = async (text: string, image?: any): Promise<Boss | null> => {
     console.log('Processing text:', text)
     
-    const bossInfo = findBossByText(text, bossData)
+    const bossInfo = await findBossByText(text, image, bossData)
     if (!bossInfo) {
       console.log('No boss found in text')
       return null
@@ -83,27 +103,25 @@ const BossTracker: React.FC = () => {
     }
   }
 
-  const handleSort = () => {
-    const newSortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
-    setSortOrder(newSortOrder);
-    
-    setBosses(prevBosses => {
-      const sortedBosses = [...prevBosses].sort((a, b) => {
-        const comparison = new Date(a.spawnTime).getTime() - new Date(b.spawnTime).getTime();
-        return newSortOrder === 'asc' ? comparison : -comparison;
-      });
-      return sortedBosses;
-    });
-    
-    toast.success(`Ordenado por tempo de spawn: ${newSortOrder === 'asc' ? 'crescente' : 'decrescente'}`);
-  };
+  const handleSort = (newSortBy: 'time' | 'name' | 'channel') => {
+    if (newSortBy === sortBy) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(newSortBy)
+      setSortOrder('asc')
+    }
+  }
 
   const onDrop = React.useCallback(async (acceptedFiles: File[]) => {
+    if (!user) {
+      toast.error('Você precisa estar logado para adicionar um boss.')
+      return
+    }
+
     setIsProcessing(true)
-    console.log('Starting image processing...')
-    
     try {
       const worker = await initializeOCRWorker()
+      console.log('Tesseract worker initialized')
 
       for (const file of acceptedFiles) {
         try {
@@ -111,13 +129,13 @@ const BossTracker: React.FC = () => {
           const text = await processImage(file, worker)
           console.log('OCR result:', text)
           
-          const bossInfo = processBossInfo(text)
+          const bossInfo = await processBossInfo(text, file)
           if (bossInfo) {
             console.log('Boss info extracted:', bossInfo)
             setPendingBoss(bossInfo)
           } else {
             console.log('No boss info found in the image')
-            toast.error('Não foi possível detectar informações do boss na imagem.')
+            toast.error(`Nenhuma informação de boss encontrada na imagem ${file.name}`)
           }
         } catch (error) {
           console.error('Error processing image:', error)
@@ -133,7 +151,7 @@ const BossTracker: React.FC = () => {
     } finally {
       setIsProcessing(false)
     }
-  }, [processBossInfo])
+  }, [processBossInfo, user])
 
   const confirmBoss = async () => {
     if (!user) {
@@ -291,15 +309,31 @@ const BossTracker: React.FC = () => {
         <CardHeader>
           <CardTitle>Boss Tracker</CardTitle>
         </CardHeader>
-        <CardContent>
-          <ImageDropzone onDrop={onDrop} isProcessing={isProcessing} />
-          {pendingBoss && (
-            <BossConfirmation
-              boss={pendingBoss}
-              onConfirm={confirmBoss}
-              onReject={rejectBoss}
+        <CardContent className="space-y-6">
+          <div>
+            <SectionHeader
+              title="Adicionar Boss"
+              description="Arraste uma screenshot ou cole uma imagem (Ctrl+V)"
+              variant="default"
             />
+            <ImageDropzone onDrop={onDrop} isProcessing={isProcessing} />
+          </div>
+
+          {pendingBoss && (
+            <div>
+              <SectionHeader
+                title="Confirmar Boss Detectado"
+                description="Verifique as informações do boss antes de confirmar"
+                variant="default"
+              />
+              <BossConfirmation
+                boss={pendingBoss}
+                onConfirm={confirmBoss}
+                onReject={rejectBoss}
+              />
+            </div>
           )}
+
           <BossList
             bosses={bosses}
             onSort={handleSort}

@@ -1,47 +1,94 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-export const findBossByText = (text: string, bossData: any[]): { name: string; spawnMap: string } | null => {
-  const normalizedText = text.toLowerCase()
+import { BossData } from '../types/boss';
+import { ImageProcessor } from './imageProcessing';
+
+export const findBossByText = async (text: string, image: any, bossData: BossData[]): Promise<BossData | null> => {
+  // Primeiro tenta o método tradicional
+  const normalizedText = text.toLowerCase();
+  let boss: BossData | null = null;
   
-  // First try to find by exact title match
-  const titleMatch = text.match(/^([^]+?)\nThis is a Boss/m)
+  // Tenta encontrar por título exato
+  const titleMatch = text.match(/^([^]+?)\nThis is a Boss/m);
   if (titleMatch) {
-    const title = titleMatch[1].trim()
-    const boss = bossData.find(b => 
+    const title = titleMatch[1].trim();
+    const foundBoss = bossData.find(b => 
       b.name.toLowerCase() === title.toLowerCase() ||
       b.searchTerms.some((term: string) => title.toLowerCase().includes(term))
-    )
-    if (boss) return boss
+    );
+    if (foundBoss) {
+      boss = foundBoss;
+      return boss;
+    }
   }
 
-  // If no title match, try searching through the entire text
-  for (const boss of bossData) {
-    if (boss.searchTerms.some((term: string) => normalizedText.includes(term))) {
-      return boss
+  // Se não encontrou por título, procura no texto todo
+  for (const b of bossData) {
+    if (b.searchTerms.some((term: string) => normalizedText.includes(term))) {
+      boss = b;
+      break;
+    }
+  }
+
+  // Se encontrou um boss, usa o processamento com referência para confirmar
+  if (boss && image) {
+    try {
+      const imageProcessor = new ImageProcessor({
+        name: boss.name,
+        spawnMap: boss.spawnMap,
+        searchTerms: boss.searchTerms,
+        regions: {
+          bossName: { x: 0, y: 0, width: 0, height: 0 }, // Valores padrão
+          channel: { x: 0, y: 0, width: 0, height: 0 },
+          time: { x: 0, y: 0, width: 0, height: 0 }
+        }
+      });
+      const results = await imageProcessor.processImageWithReference(image);
+      
+      // Verifica se o resultado do processamento com referência confirma o boss
+      if (results.bossName && results.bossName.confidence > 0.7) {
+        return boss;
+      }
+    } catch (error) {
+      console.error('Error processing image with reference:', error);
     }
   }
   
-  return null
-}
+  return boss; // Agora boss é explicitamente tipado como BossData | null
+};
 
 export const extractTimeFromText = (text: string): { hours: number; minutes: number } | null => {
   // Padrões para capturar horas e minutos, ou apenas minutos
   const patterns = [
-    /(\d+)\s*hours?\s*and\s*(\d+)\s*minutes?/i,   // Ex: 2 hours and 18 minutes
-    /move\s*after\s*(\d+)\s*hours?\s*and\s*(\d+)\s*minutes?/i,
-    /(\d+)h\s*(\d+)m/i,
-    /(\d+)\s*minutes?/i                           // Ex: Closed in 36 minutes
-  ];
+    /(\d+)\s*hours?\s*and\s*(\d+)\s*(?:min(?:u(?:t(?:es?)?)?)?)/i,   // Ex: 2 hours and 18 min/mins/minu/minut/minute/minutes
+    /(\d+)\s*hrs?\s*(?:and)?\s*(\d+)\s*(?:min(?:u(?:t(?:es?)?)?)?)/i,  // Ex: 2hr(s) 18min
+    /(\d+)\s*h\s*(?:and)?\s*(\d+)\s*(?:min(?:u(?:t(?:es?)?)?)?)/i,     // Ex: 2h 18min
+    /(\d+):(\d+)/,                                                       // Ex: 2:18
+    /(\d+)\s*(?:min(?:u(?:t(?:es?)?)?)?)/i,                            // Ex: 18 min/mins/minu/minut/minute/minutes
+  ]
 
+  // Tenta cada padrão
   for (const pattern of patterns) {
-    const match = text.match(pattern);
+    const match = text.match(pattern)
     if (match) {
-      return {
-        hours: match[2] ? parseInt(match[1], 10) : 0,
-        minutes: match[2] ? parseInt(match[2], 10) : parseInt(match[1], 10)
-      };
+      // Se o padrão tem dois grupos (horas e minutos)
+      if (match[2]) {
+        const hours = parseInt(match[1])
+        const minutes = parseInt(match[2])
+        if (!isNaN(hours) && !isNaN(minutes)) {
+          return { hours, minutes }
+        }
+      }
+      // Se o padrão tem apenas um grupo (apenas minutos)
+      else {
+        const minutes = parseInt(match[1])
+        if (!isNaN(minutes)) {
+          return { hours: 0, minutes }
+        }
+      }
     }
   }
-  return null;
+
+  return null
 };
 
 export const extractChannelFromText = (text: string): string | null => {
@@ -53,18 +100,25 @@ export const extractChannelFromText = (text: string): string | null => {
     .replace(/Cronei/gi, 'Channel')
     .replace(/Choone/gi, 'Channel')
     .replace(/Ghannel/gi, 'Channel')
-    .replace(/Ghamnel/gi, 'Channel'); 
+    .replace(/Ghamnel/gi, 'Channel');
 
-  const patterns = [
-    /Channel\s*(\d+)\s*-\s*Not\s*Appeared/i,
-    /Channel\s*(\d+)/i
-  ];
-
-  for (const pattern of patterns) {
-    const match = normalizedText.match(pattern);
-    if (match) {
-      return match[1];
+  // Procurar por "Channel X" onde X é um número
+  const channelMatch = normalizedText.match(/Channel\s*(\d+)/i);
+  if (channelMatch) {
+    const channelNum = parseInt(channelMatch[1], 10);
+    if (channelNum >= 1 && channelNum <= 13) {
+      return channelNum.toString();
     }
   }
+
+  // Procurar por números isolados que podem ser canais
+  const numberMatch = normalizedText.match(/\b(\d+)\b/);
+  if (numberMatch) {
+    const channelNum = parseInt(numberMatch[1], 10);
+    if (channelNum >= 1 && channelNum <= 13) {
+      return channelNum.toString();
+    }
+  }
+
   return null;
 };
