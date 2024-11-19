@@ -1,10 +1,14 @@
-import React from 'react'
+'use client'
+
+import React, { useState } from 'react'
 import { format, isValid, parseISO } from 'date-fns'
 import { Trash2, Check, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Boss } from '@/app/types/boss'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { toast } from 'react-hot-toast'
+import { ConfirmationDialog } from './ConfirmationDialog'
+import { cn } from '@/lib/utils'
 
 interface BossCardProps {
   boss: Boss
@@ -13,6 +17,11 @@ interface BossCardProps {
 }
 
 const BossCard: React.FC<BossCardProps> = ({ boss, onRemove, onUpdateStatus }) => {
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'kill' | 'noshow' | 'remove' | null;
+    isOpen: boolean;
+  }>({ type: null, isOpen: false });
+
   const formatSpawnTime = (spawnTime: string | Date) => {
     if (typeof spawnTime === 'string') {
       const date = parseISO(spawnTime)
@@ -25,9 +34,8 @@ const BossCard: React.FC<BossCardProps> = ({ boss, onRemove, onUpdateStatus }) =
 
   const handleStatusUpdate = async (status: 'killed' | 'noshow') => {
     try {
-      console.log('BossCard: Trying to update status', { bossId: boss.id, status })
       await onUpdateStatus(boss.id, status)
-      console.log('BossCard: Status updated successfully')
+      toast.success(`Boss ${status === 'killed' ? 'marcado como morto' : 'marcado como não aparecido'} com sucesso!`)
     } catch (error) {
       console.error('BossCard: Error updating boss status:', error)
       toast.error('Erro ao atualizar o status do boss. Tente novamente.')
@@ -36,91 +44,139 @@ const BossCard: React.FC<BossCardProps> = ({ boss, onRemove, onUpdateStatus }) =
 
   const handleRemove = async () => {
     try {
-      console.log('BossCard: Trying to remove boss', { bossId: boss.id })
       await onRemove(boss.id)
-      console.log('BossCard: Boss removed successfully')
+      toast.success('Boss removido com sucesso!')
     } catch (error) {
       console.error('BossCard: Error removing boss:', error)
       toast.error('Erro ao remover o boss. Tente novamente.')
     }
   }
 
+  const getConfirmationDetails = () => {
+    switch (confirmAction.type) {
+      case 'kill':
+        return {
+          title: 'Marcar como Morto',
+          description: 'Tem certeza que deseja marcar este boss como morto? O card será removido após a confirmação.',
+        }
+      case 'noshow':
+        return {
+          title: 'Marcar como Não Apareceu',
+          description: 'Tem certeza que deseja marcar este boss como não aparecido? O card será removido após a confirmação.',
+        }
+      case 'remove':
+        return {
+          title: 'Remover Boss',
+          description: 'Tem certeza que deseja remover este boss?',
+        }
+      default:
+        return { title: '', description: '' }
+    }
+  }
+
+  const handleConfirmAction = async () => {
+    switch (confirmAction.type) {
+      case 'kill':
+        await handleStatusUpdate('killed')
+        break
+      case 'noshow':
+        await handleStatusUpdate('noshow')
+        break
+      case 'remove':
+        await handleRemove()
+        break
+    }
+    setConfirmAction({ type: null, isOpen: false })
+  }
+
   return (
-    <div className="p-3 bg-secondary rounded-lg flex justify-between items-center hover:bg-secondary/80 transition-colors">
-      <div>
-        <strong className="text-primary">{boss.name}</strong>
-        <p className="text-sm text-muted-foreground">{boss.spawnMap}</p>
-        {boss.channel && <p className="text-sm">{boss.channel}</p>}
-        <p className="text-sm">Nascimento: {formatSpawnTime(boss.spawnTime)}</p>
-        {boss.status && (
-          <p className="text-sm font-semibold">
-            Status: {boss.status === 'killed' ? 'Morto' : boss.status === 'noshow' ? 'Não apareceu' : 'Pendente'}
-          </p>
-        )}
+    <>
+      <div className="p-3 bg-secondary rounded-lg flex justify-between items-center hover:bg-secondary/80 transition-colors">
+        <div>
+          <strong className="text-primary">{boss.name}</strong>
+          <p className="text-sm text-muted-foreground">{boss.spawnMap}</p>
+          {boss.channel && <p className="text-sm">{boss.channel}</p>}
+          <p className="text-sm">Nascimento: {formatSpawnTime(boss.spawnTime)}</p>
+          {boss.status && (
+            <p className="text-sm font-semibold">
+              Status: {boss.status === 'killed' ? 'Morto' : boss.status === 'noshow' ? 'Não apareceu' : 'Pendente'}
+            </p>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setConfirmAction({ type: 'kill', isOpen: true })}
+                  className={cn(
+                    "text-emerald-500 dark:text-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-300",
+                    "hover:bg-emerald-500/10"
+                  )}
+                >
+                  <Check className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Marcar como morto</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setConfirmAction({ type: 'noshow', isOpen: true })}
+                  className={cn(
+                    "text-amber-500 dark:text-amber-400 hover:text-amber-600 dark:hover:text-amber-300",
+                    "hover:bg-amber-500/10"
+                  )}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Marcar como não apareceu</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setConfirmAction({ type: 'remove', isOpen: true })}
+                  className={cn(
+                    "text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300",
+                    "hover:bg-red-500/10"
+                  )}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Remover boss</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
       </div>
-      <div className="flex items-center space-x-2">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  console.log('BossCard: Killed button clicked')
-                  handleStatusUpdate('killed')
-                }}
-                className="text-green-500 hover:text-green-600"
-              >
-                <Check className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Marcar como morto</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  console.log('BossCard: No-show button clicked')
-                  handleStatusUpdate('noshow')
-                }}
-                className="text-yellow-500 hover:text-yellow-600"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Marcar como não apareceu</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  console.log('BossCard: Remove button clicked')
-                  handleRemove()
-                }}
-                className="text-destructive hover:text-destructive/90"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Remover boss</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-    </div>
+
+      <ConfirmationDialog
+        isOpen={confirmAction.isOpen}
+        onClose={() => setConfirmAction({ type: null, isOpen: false })}
+        onConfirm={handleConfirmAction}
+        {...getConfirmationDetails()}
+      />
+    </>
   )
 }
 

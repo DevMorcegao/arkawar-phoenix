@@ -9,6 +9,8 @@ import { UserInfo } from "firebase/auth"
 import { Shield, Trash2, UserPlus, ChevronDown, ChevronUp } from 'lucide-react'
 import BossTracker from "./BossTracker"
 import BossList from "./BossList"
+import BossDrops from "./BossDrops"
+import BossStatus from "./BossStatus"
 import { Boss } from "@/app/types/boss"
 import { toast } from "react-hot-toast"
 import { useAuth } from "@/contexts/AuthContext"
@@ -74,7 +76,7 @@ export default function AdminPanel() {
   const subscribeToAllBosses = () => {
     const bossesQuery = query(
       collection(db, 'bossSpawns'),
-      where('status', '!=', 'deleted')
+      where('status', '==', 'pending')  // Mostrar apenas bosses pendentes
     )
     return onSnapshot(bossesQuery, (snapshot) => {
       const updatedBosses = snapshot.docs.map(doc => ({
@@ -154,14 +156,8 @@ export default function AdminPanel() {
         lastUpdated: serverTimestamp()
       })
 
-      // Update local state immediately
-      setAllBosses(prevBosses => 
-        prevBosses.map(boss => 
-          boss.id === id ? { ...boss, status, lastUpdated: new Date() } : boss
-        )
-      )
-
-      toast.success(`Status do boss atualizado para: ${status}`)
+      // O boss será removido automaticamente da lista devido à query do Firestore
+      // que só mostra bosses com status 'pending'
     } catch (error) {
       console.error('Error updating boss status:', error)
       toast.error('Erro ao atualizar o status do boss.')
@@ -197,8 +193,6 @@ export default function AdminPanel() {
 
       // Update local state immediately
       setAllBosses(prevBosses => prevBosses.filter(boss => boss.id !== id))
-      
-      toast.success('Boss removido com sucesso.')
     } catch (error) {
       console.error('Error removing boss:', error)
       toast.error('Erro ao remover o boss.')
@@ -233,6 +227,8 @@ export default function AdminPanel() {
             Todos os Bosses
             {showAllBosses ? <ChevronUp className="ml-2 h-4 w-4" /> : <ChevronDown className="ml-2 h-4 w-4" />}
           </Button>
+          <BossDrops />
+          <BossStatus />
         </div>
 
         {showUsers && (

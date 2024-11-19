@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from 'react'
-import { collection, setDoc, doc, onSnapshot, updateDoc, query, where, getDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, setDoc, doc, onSnapshot, updateDoc, query, where, getDoc, serverTimestamp, getDocs, orderBy, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,10 +9,12 @@ import { toast } from 'react-hot-toast'
 import { Boss } from '@/app/types/boss' 
 import { findBossByText, extractTimeFromText, extractChannelFromText } from '@/app/utils/textProcessing'
 import { bossData } from '@/app/data/bossData' 
+import { bossRespawnData } from '@/app/data/bossRespawnData'
 import ImageDropzone from './ImageDropzone'
 import BossList from './BossList'
 import BossConfirmation from './BossConfirmation'
 import { addHours, addMinutes, subMinutes } from 'date-fns'
+import { differenceInHours, differenceInMinutes } from 'date-fns'
 import { initializeOCRWorker, processImage } from '@/app/utils/ocrProcessor'
 import { SectionHeader } from '@/components/ui/section-header'
 
@@ -27,10 +29,10 @@ const BossTracker: React.FC = () => {
   useEffect(() => {
     if (!user) return
 
-    // Query para todos os bosses exceto os deletados
+    // Query para todos os bosses exceto os deletados, killed e noshow
     const q = query(
       collection(db, 'bossSpawns'),
-      where('status', 'in', ['pending', 'killed', 'noshow'])
+      where('status', '==', 'pending')
     )
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -153,14 +155,113 @@ const BossTracker: React.FC = () => {
     }
   }, [processBossInfo, user])
 
+  const checkBossRespawnTime = async (bossName: string, channel: string): Promise<{ canSpawn: boolean; message?: string }> => {
+    try {
+      const respawnInfo = bossRespawnData[bossName]
+      if (!respawnInfo) return { canSpawn: true } // Se o boss não está na lista de respawn, permite adicionar
+
+      // Primeiro, buscar todos os registros do mesmo boss no mesmo canal que foram mortos
+      const q = query(
+        collection(db, 'bossSpawns'),
+        where('name', '==', bossName),
+        where('channel', '==', channel),
+        where('status', '==', 'killed')
+      )
+
+      const snapshot = await getDocs(q)
+      if (snapshot.empty) return { canSpawn: true }
+
+      // Encontrar o registro mais recente localmente
+      const sortedDocs = snapshot.docs
+        .map(doc => ({
+          ...doc.data(),
+          spawnTime: doc.data().spawnTime,
+        }))
+        .sort((a, b) => new Date(b.spawnTime).getTime() - new Date(a.spawnTime).getTime())
+
+      if (sortedDocs.length === 0) return { canSpawn: true }
+
+      // Usar o horário de spawn + 5 minutos como referência
+      const lastSpawnTime = new Date(sortedDocs[0].spawnTime)
+      const lastKillTime = addMinutes(lastSpawnTime, 5) // Adiciona 5 minutos ao horário de spawn
+      const now = new Date()
+      const hoursSinceKill = differenceInHours(now, lastKillTime)
+      const minutesSinceKill = differenceInMinutes(now, lastKillTime) % 60
+
+      if (hoursSinceKill < respawnInfo.minHours) {
+        const hoursRemaining = respawnInfo.minHours - hoursSinceKill - 1
+        const minutesRemaining = 60 - minutesSinceKill
+        
+        return {
+          canSpawn: false,
+          message: `Este boss foi morto há ${hoursSinceKill}h ${minutesSinceKill}m. Tempo mínimo de respawn: ${respawnInfo.minHours}h. Faltam ${hoursRemaining}h ${minutesRemaining}m para poder adicionar.`
+        }
+      }
+
+      if (hoursSinceKill < respawnInfo.maxHours) {
+        return {
+          canSpawn: true,
+          message: `Atenção: Este boss foi morto há ${hoursSinceKill}h ${minutesSinceKill}m. Tempo de respawn: ${respawnInfo.minHours}h ~ ${respawnInfo.maxHours}h.`
+        }
+      }
+
+      return { canSpawn: true }
+    } catch (error) {
+      console.error('Error checking boss respawn time:', error)
+      return { canSpawn: true } // Em caso de erro, permite adicionar
+    }
+  }
+
+  const checkDuplicateBoss = async (bossName: string, channel: string): Promise<boolean> => {
+    try {
+      const q = query(
+        collection(db, 'bossSpawns'),
+        where('name', '==', bossName),
+        where('channel', '==', channel),
+        where('status', '==', 'pending')
+      )
+
+      const snapshot = await getDocs(q)
+      return !snapshot.empty
+    } catch (error) {
+      console.error('Error checking duplicate boss:', error)
+      return false // Em caso de erro, permite adicionar
+    }
+  }
+
   const confirmBoss = async () => {
     if (!user) {
       toast.error('Você precisa estar logado para adicionar um boss.')
       return
     }
 
-    if (pendingBoss) {
+    if (pendingBoss && pendingBoss.name && pendingBoss.channel) {
       try {
+        // Verificar duplicatas
+        const isDuplicate = await checkDuplicateBoss(pendingBoss.name, pendingBoss.channel)
+        if (isDuplicate) {
+          toast.error(`Já existe um boss card pendente para ${pendingBoss.name} no ${pendingBoss.channel}.`)
+          return
+        }
+
+        // Verificar tempo de respawn
+        const respawnCheck = await checkBossRespawnTime(pendingBoss.name, pendingBoss.channel)
+        if (!respawnCheck.canSpawn) {
+          if (respawnCheck.message) {
+            toast.error(respawnCheck.message)
+          } else {
+            toast.error('Não é possível adicionar o boss neste momento.')
+          }
+          return
+        }
+
+        if (respawnCheck.message) {
+          toast(respawnCheck.message, {
+            icon: '⚠️',
+            duration: 6000
+          })
+        }
+
         const newBoss = {
           ...pendingBoss,
           userId: user.uid,
@@ -178,13 +279,15 @@ const BossTracker: React.FC = () => {
         console.error('Error saving boss data:', error)
         toast.error('Erro ao salvar dados do boss. Tente novamente.')
       }
+    } else {
+      toast.error('Dados do boss inválidos ou incompletos.')
     }
   }
 
   const rejectBoss = () => {
     setPendingBoss(null);
     toast('Boss rejeitado.', {
-      icon: '',         // Ícone informativo
+      icon: '🚫',
       duration: 5000      
     });
   };
@@ -223,14 +326,10 @@ const BossTracker: React.FC = () => {
       })
 
       // Atualizar o estado local imediatamente
-      setBosses(prevBosses => 
-        prevBosses.map(boss => 
-          boss.id === id ? { ...boss, status, lastUpdated: new Date() } : boss
-        )
-      )
+      setBosses(prevBosses => prevBosses.filter(boss => boss.id !== id))
 
       console.log('BossTracker: Boss status updated successfully')
-      toast.success(`Status do boss atualizado para: ${status}`)
+      // Removido o toast daqui pois já é mostrado no BossCard
     } catch (error) {
       console.error('BossTracker: Error updating boss status:', error)
       toast.error('Erro ao atualizar o status do boss.')
@@ -312,7 +411,7 @@ const BossTracker: React.FC = () => {
         <CardContent className="space-y-6">
           <div>
             <SectionHeader
-              title="Adicionar Boss"
+              title="Adicionar um Novo Boss"
               description="Arraste uma screenshot ou cole uma imagem (Ctrl+V)"
               variant="default"
             />
@@ -322,7 +421,7 @@ const BossTracker: React.FC = () => {
           {pendingBoss && (
             <div>
               <SectionHeader
-                title="Confirmar Boss Detectado"
+                title="Confirmar Informações do Boss"
                 description="Verifique as informações do boss antes de confirmar"
                 variant="default"
               />
