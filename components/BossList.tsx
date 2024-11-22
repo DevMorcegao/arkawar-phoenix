@@ -16,9 +16,10 @@ interface BossListProps {
   onSort: (sortBy: 'time' | 'name' | 'channel') => void
   onRemove: (id: string) => Promise<void>
   onUpdateStatus: (id: string, status: 'killed' | 'noshow') => Promise<void>
+  onEdit: (boss: Boss) => Promise<void>
 }
 
-const BossList: React.FC<BossListProps> = ({ bosses, onSort, onRemove, onUpdateStatus }) => {
+const BossList: React.FC<BossListProps> = ({ bosses, onSort, onRemove, onUpdateStatus, onEdit }) => {
   if (bosses.length === 0) return null
 
   const sortButton = (
@@ -51,23 +52,31 @@ const BossList: React.FC<BossListProps> = ({ bosses, onSort, onRemove, onUpdateS
   )
 
   return (
-    <div className="mt-8">
-      <SectionHeader
-        title="Bosses Detectados"
-        description={`${bosses.length} boss${bosses.length === 1 ? '' : 'es'} encontrado${bosses.length === 1 ? '' : 's'}`}
-        rightElement={sortButton}
-        variant="large"
-        className="border-b"
-      />
-      <div className="space-y-4 mt-4">
-        {bosses.map((boss) => (
-          <BossCard
-            key={boss.id}
-            boss={boss}
-            onRemove={onRemove}
-            onUpdateStatus={onUpdateStatus}
-          />
-        ))}
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <SectionHeader
+          title="Lista de Bosses"
+          description={`${bosses.length} bosses encontrados`}
+          variant="default"
+        />
+        {sortButton}
+      </div>
+      <div className="space-y-2">
+        {bosses.map((boss) => {
+          console.log('BossList: Rendering BossCard for boss:', boss.id)
+          return (
+            <BossCard
+              key={boss.id}
+              boss={boss}
+              onRemove={onRemove}
+              onUpdateStatus={onUpdateStatus}
+              onEdit={(updatedBoss) => {
+                console.log('BossList: Calling onEdit for boss:', updatedBoss)
+                return onEdit(updatedBoss)
+              }}
+            />
+          )
+        })}
       </div>
     </div>
   )

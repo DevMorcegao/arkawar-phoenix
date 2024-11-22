@@ -11,8 +11,8 @@ import {
 } from "@/components/ui/alert-dialog";
 
 interface ConfirmationDialogProps {
-  isOpen: boolean;
-  onClose: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
   title: string;
   description: string;
@@ -21,8 +21,8 @@ interface ConfirmationDialogProps {
 }
 
 export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
-  isOpen,
-  onClose,
+  open,
+  onOpenChange,
   onConfirm,
   title,
   description,
@@ -30,7 +30,7 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
   cancelText = "Cancelar",
 }) => {
   return (
-    <AlertDialog open={isOpen} onOpenChange={onClose}>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>

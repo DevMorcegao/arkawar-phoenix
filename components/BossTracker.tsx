@@ -1,22 +1,23 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { collection, setDoc, doc, onSnapshot, updateDoc, query, where, getDoc, serverTimestamp, getDocs, orderBy, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { toast } from 'react-hot-toast'
 import { Boss } from '@/app/types/boss' 
 import { findBossByText, extractTimeFromText, extractChannelFromText } from '@/app/utils/textProcessing'
 import { bossData } from '@/app/data/bossData' 
 import { bossRespawnData } from '@/app/data/bossRespawnData'
 import ImageDropzone from './ImageDropzone'
-import BossList from './BossList'
+import BossCard from './BossCard'
 import BossConfirmation from './BossConfirmation'
 import { addHours, addMinutes, subMinutes } from 'date-fns'
 import { differenceInHours, differenceInMinutes } from 'date-fns'
 import { initializeOCRWorker, processImage } from '@/app/utils/ocrProcessor'
-import { SectionHeader } from '@/components/ui/section-header'
+import { cn } from '@/lib/utils'
 
 const BossTracker: React.FC = () => {
   const [bosses, setBosses] = useState<Boss[]>([])
@@ -50,12 +51,12 @@ const BossTracker: React.FC = () => {
           const timeB = new Date(b.spawnTime).getTime()
           return sortOrder === 'asc' ? timeA - timeB : timeB - timeA
         } else if (sortBy === 'name') {
-          const nameA = a.name.toLowerCase()
-          const nameB = b.name.toLowerCase()
-          return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA)
+          return sortOrder === 'asc' 
+            ? a.name.localeCompare(b.name)
+            : b.name.localeCompare(a.name)
         } else { // channel
-          const channelA = a.channel ? parseInt(a.channel) : 0
-          const channelB = b.channel ? parseInt(b.channel) : 0
+          const channelA = parseInt((a.channel || 'Channel 0').replace(/\D/g, '')) || 0
+          const channelB = parseInt((b.channel || 'Channel 0').replace(/\D/g, '')) || 0
           return sortOrder === 'asc' ? channelA - channelB : channelB - channelA
         }
       })
@@ -65,6 +66,15 @@ const BossTracker: React.FC = () => {
 
     return () => unsubscribe()
   }, [user, sortOrder, sortBy])
+
+  const handleSort = (newSortBy: 'time' | 'name' | 'channel') => {
+    if (newSortBy === sortBy) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(newSortBy)
+      setSortOrder('asc')
+    }
+  }
 
   const calculateSpawnTime = (hours: number, minutes: number): Date => {
     const now = new Date()
@@ -99,18 +109,10 @@ const BossTracker: React.FC = () => {
       name: bossInfo.name,
       spawnMap: bossInfo.spawnMap,
       channel: channel ? `Channel ${channel}` : 'Unknown',
-      appearanceStatus: `${timeInfo.hours}h ${timeInfo.minutes}m`,
+      appearanceStatus: 'pending',
+      capturedTime: `${timeInfo.hours}h ${timeInfo.minutes}m`,
       spawnTime: spawnTime.toISOString(), // Convert to ISO string for Firestore
       status: 'pending'
-    }
-  }
-
-  const handleSort = (newSortBy: 'time' | 'name' | 'channel') => {
-    if (newSortBy === sortBy) {
-      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortBy(newSortBy)
-      setSortOrder('asc')
     }
   }
 
@@ -188,13 +190,14 @@ const BossTracker: React.FC = () => {
       const hoursSinceKill = differenceInHours(now, lastKillTime)
       const minutesSinceKill = differenceInMinutes(now, lastKillTime) % 60
 
-      if (hoursSinceKill < respawnInfo.minHours) {
-        const hoursRemaining = respawnInfo.minHours - hoursSinceKill - 1
-        const minutesRemaining = 60 - minutesSinceKill
-        
+      // Calcula o tempo até poder adicionar (6 horas antes do tempo mínimo)
+      const earlyAddHours = respawnInfo.minHours - 6
+      const hoursUntilEarlyAdd = earlyAddHours - hoursSinceKill
+
+      if (hoursSinceKill < earlyAddHours) {
         return {
-          canSpawn: false,
-          message: `Este boss foi morto há ${hoursSinceKill}h ${minutesSinceKill}m. Tempo mínimo de respawn: ${respawnInfo.minHours}h. Faltam ${hoursRemaining}h ${minutesRemaining}m para poder adicionar.`
+          canSpawn: true, // Permite adicionar mesmo que falte tempo
+          message: `Este boss foi morto há ${hoursSinceKill}h ${minutesSinceKill}m. Tempo mínimo de respawn: ${respawnInfo.minHours}h. Faltam ${hoursUntilEarlyAdd}h para o tempo mínimo.`
         }
       }
 
@@ -229,23 +232,23 @@ const BossTracker: React.FC = () => {
     }
   }
 
-  const confirmBoss = async () => {
+  const confirmBoss = async (updatedBoss: Boss) => {
     if (!user) {
       toast.error('Você precisa estar logado para adicionar um boss.')
       return
     }
 
-    if (pendingBoss && pendingBoss.name && pendingBoss.channel) {
+    if (updatedBoss && updatedBoss.name && updatedBoss.channel) {
       try {
         // Verificar duplicatas
-        const isDuplicate = await checkDuplicateBoss(pendingBoss.name, pendingBoss.channel)
+        const isDuplicate = await checkDuplicateBoss(updatedBoss.name, updatedBoss.channel)
         if (isDuplicate) {
-          toast.error(`Já existe um boss card pendente para ${pendingBoss.name} no ${pendingBoss.channel}.`)
+          toast.error(`Já existe um boss card pendente para ${updatedBoss.name} no ${updatedBoss.channel}.`)
           return
         }
 
         // Verificar tempo de respawn
-        const respawnCheck = await checkBossRespawnTime(pendingBoss.name, pendingBoss.channel)
+        const respawnCheck = await checkBossRespawnTime(updatedBoss.name, updatedBoss.channel)
         if (!respawnCheck.canSpawn) {
           if (respawnCheck.message) {
             toast.error(respawnCheck.message)
@@ -263,18 +266,18 @@ const BossTracker: React.FC = () => {
         }
 
         const newBoss = {
-          ...pendingBoss,
+          ...updatedBoss,
           userId: user.uid,
           createdAt: serverTimestamp(),
           lastUpdated: serverTimestamp()
         }
 
         // Usar setDoc com o ID gerado localmente
-        const bossRef = doc(db, 'bossSpawns', pendingBoss.id)
+        const bossRef = doc(db, 'bossSpawns', updatedBoss.id)
         await setDoc(bossRef, newBoss)
         
         setPendingBoss(null)
-        toast.success(`Boss ${pendingBoss.name} adicionado à lista.`)
+        toast.success(`Boss ${updatedBoss.name} adicionado à lista.`)
       } catch (error) {
         console.error('Error saving boss data:', error)
         toast.error('Erro ao salvar dados do boss. Tente novamente.')
@@ -319,17 +322,31 @@ const BossTracker: React.FC = () => {
         return
       }
 
+      // Se estiver marcando como morto ou não apareceu, verificar se já passou do horário de spawn
+      if (status === 'killed' || status === 'noshow') {
+        const spawnTime = new Date(bossData.spawnTime)
+        const now = new Date()
+        
+        if (now < spawnTime) {
+          const diffInMinutes = Math.round((spawnTime.getTime() - now.getTime()) / (1000 * 60))
+          const hours = Math.floor(diffInMinutes / 60)
+          const minutes = diffInMinutes % 60
+          const action = status === 'killed' ? 'morto' : 'como não apareceu'
+          toast.error(`Não é possível marcar o boss como ${action} antes do horário de spawn. Faltam ${hours}h ${minutes}m para o nascimento.`)
+          return
+        }
+      }
+
       console.log('BossTracker: Updating boss status', { id, status })
       await updateDoc(bossRef, {
         status,
+        appearanceStatus: status,
         lastUpdated: serverTimestamp()
       })
 
-      // Atualizar o estado local imediatamente
-      setBosses(prevBosses => prevBosses.filter(boss => boss.id !== id))
-
+      // Não precisamos atualizar o estado local pois o onSnapshot já vai cuidar disso
       console.log('BossTracker: Boss status updated successfully')
-      // Removido o toast daqui pois já é mostrado no BossCard
+      toast.success(status === 'killed' ? 'Boss marcado como morto!' : 'Boss marcado como não aparecido!')
     } catch (error) {
       console.error('BossTracker: Error updating boss status:', error)
       toast.error('Erro ao atualizar o status do boss.')
@@ -366,11 +383,9 @@ const BossTracker: React.FC = () => {
       console.log('BossTracker: Marking boss as deleted', { id })
       await updateDoc(bossRef, {
         status: 'deleted',
+        appearanceStatus: 'deleted',
         lastUpdated: serverTimestamp()
       })
-
-      // Atualizar o estado local imediatamente
-      setBosses(prevBosses => prevBosses.filter(boss => boss.id !== id))
 
       console.log('BossTracker: Boss marked as deleted successfully')
       toast.success('Boss removido com sucesso.')
@@ -380,10 +395,58 @@ const BossTracker: React.FC = () => {
     }
   }
 
+  const handleEditBoss = async (updatedBoss: Boss) => {
+    console.log('BossTracker: handleEditBoss called with:', updatedBoss)
+    if (!user) {
+      toast.error('Você precisa estar logado para editar um boss.')
+      return
+    }
+
+    if (!updatedBoss.name || !updatedBoss.channel) {
+      toast.error('Nome do boss e canal são obrigatórios.')
+      return
+    }
+
+    try {
+      // Verificar se o boss existe
+      const bossRef = doc(db, 'bossSpawns', updatedBoss.id)
+      const bossDoc = await getDoc(bossRef)
+      
+      if (!bossDoc.exists()) {
+        toast.error('Boss não encontrado.')
+        return
+      }
+
+      const currentBoss = bossDoc.data() as Boss
+
+      // Verificar duplicatas (exceto o próprio boss)
+      const isDuplicate = await checkDuplicateBoss(updatedBoss.name, updatedBoss.channel)
+      if (isDuplicate && currentBoss.channel !== updatedBoss.channel) {
+        toast.error(`Já existe um boss card pendente para ${updatedBoss.name} no ${updatedBoss.channel}.`)
+        return
+      }
+
+      const updateData = {
+        ...updatedBoss,
+        lastUpdated: serverTimestamp(),
+        lastModifiedBy: user.uid,
+        status: updatedBoss.status || 'pending'
+      }
+
+      console.log('BossTracker: Updating boss with data:', updateData)
+      await setDoc(bossRef, updateData, { merge: true })
+      console.log('BossTracker: Boss updated successfully')
+      toast.success('Boss atualizado com sucesso!')
+    } catch (error) {
+      console.error('BossTracker: Error updating boss:', error)
+      toast.error('Erro ao atualizar o boss. Tente novamente.')
+    }
+  }
+
   const pasteImage = React.useCallback(async (e: ClipboardEvent) => {
     const items = e.clipboardData?.items
     if (items) {
-      for (let i = 0; i < items.length; i++) {
+      for (let i = 0; i <items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
           const blob = items[i].getAsFile()
           if (blob) {
@@ -403,42 +466,111 @@ const BossTracker: React.FC = () => {
   }, [pasteImage])
 
   return (
-    <div className="p-4">
+    <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle>Boss Tracker</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div>
-            <SectionHeader
-              title="Adicionar um Novo Boss"
-              description="Arraste uma screenshot ou cole uma imagem (Ctrl+V)"
-              variant="default"
-            />
-            <ImageDropzone onDrop={onDrop} isProcessing={isProcessing} />
-          </div>
-
-          {pendingBoss && (
+        <CardContent>
+          <div className="space-y-4">
             <div>
-              <SectionHeader
-                title="Confirmar Informações do Boss"
-                description="Verifique as informações do boss antes de confirmar"
-                variant="default"
-              />
-              <BossConfirmation
-                boss={pendingBoss}
-                onConfirm={confirmBoss}
-                onReject={rejectBoss}
+              <h3 className="text-lg font-semibold mb-2">Adicionar um Novo Boss</h3>
+              <p className="text-sm text-muted-foreground mb-4">Arraste uma screenshot ou cole uma imagem (Ctrl+V)</p>
+              
+              <ImageDropzone
+                onDrop={onDrop}
+                isProcessing={isProcessing}
               />
             </div>
-          )}
 
-          <BossList
-            bosses={bosses}
-            onSort={handleSort}
-            onRemove={handleRemoveBoss}
-            onUpdateStatus={handleUpdateStatus}
-          />
+            {pendingBoss && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-lg font-semibold">Confirmar Informações do Boss</h3>
+                  <p className="text-sm text-muted-foreground">Verifique as informações do boss antes de confirmar</p>
+                </div>
+                <BossConfirmation
+                  boss={pendingBoss}
+                  onConfirm={confirmBoss}
+                  onReject={rejectBoss}
+                />
+              </div>
+            )}
+
+            {bosses.length > 0 && (
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold">Bosses Detectados</h3>
+                    <p className="text-sm text-muted-foreground">{bosses.length} {bosses.length === 1 ? 'boss encontrado' : 'bosses encontrados'}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">Ordenar por:</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleSort('time')}
+                      className={cn(
+                        "flex items-center gap-1",
+                        sortBy === 'time' && "bg-orange-500/10 hover:bg-orange-500/20 text-orange-500"
+                      )}
+                    >
+                      Tempo
+                      {sortBy === 'time' && (
+                        <span className="ml-1">
+                          {sortOrder === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleSort('name')}
+                      className={cn(
+                        "flex items-center gap-1",
+                        sortBy === 'name' && "bg-orange-500/10 hover:bg-orange-500/20 text-orange-500"
+                      )}
+                    >
+                      Nome
+                      {sortBy === 'name' && (
+                        <span className="ml-1">
+                          {sortOrder === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleSort('channel')}
+                      className={cn(
+                        "flex items-center gap-1",
+                        sortBy === 'channel' && "bg-orange-500/10 hover:bg-orange-500/20 text-orange-500"
+                      )}
+                    >
+                      Canal
+                      {sortBy === 'channel' && (
+                        <span className="ml-1">
+                          {sortOrder === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {bosses.map((boss) => (
+                    <BossCard
+                      key={boss.id}
+                      boss={boss}
+                      onRemove={handleRemoveBoss}
+                      onUpdateStatus={handleUpdateStatus}
+                      onEdit={handleEditBoss}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>

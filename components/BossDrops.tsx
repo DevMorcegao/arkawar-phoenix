@@ -1,28 +1,26 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { bossDropData } from '@/app/data/bossDropData'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 
 export default function BossDrops() {
-  const [selectedBoss, setSelectedBoss] = useState<string | null>(null)
+  const [selectedBoss, setSelectedBoss] = useState<string>("")
   const [isOpen, setIsOpen] = useState(false)
+
+  useEffect(() => {
+    (window as any).openBossDropsModal = () => setIsOpen(true)
+  }, [])
 
   const bosses = Object.keys(bossDropData)
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button className="flex items-center">
-          Drops dos Bosses
-          {isOpen ? <ChevronUp className="ml-2 h-4 w-4" /> : <ChevronDown className="ml-2 h-4 w-4" />}
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-[800px] max-h-[80vh]">
+      <DialogContent className="max-w-[800px] max-h-[80vh]" data-boss-drops-dialog>
         <DialogHeader>
           <DialogTitle>Drops dos Bosses</DialogTitle>
         </DialogHeader>

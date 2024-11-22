@@ -4,6 +4,7 @@ export interface Boss {
   spawnMap: string
   channel?: string
   appearanceStatus: string
+  capturedTime?: string
   spawnTime: string
   status: 'pending' | 'killed' | 'noshow' | 'deleted'
   lastUpdated?: Date | null

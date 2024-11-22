@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -18,11 +18,11 @@ import { Separator } from '@/components/ui/separator'
 export default function BossStatus() {
   const [isOpen, setIsOpen] = useState(false)
   const [isFilterOpen, setIsFilterOpen] = useState(false)
-  const [bossStatuses, setBossStatuses] = useState<BossStatusInfo[]>([])
-  const [loading, setLoading] = useState(true)
   const [selectedChannels, setSelectedChannels] = useState<string[]>([])
   const [selectedBosses, setSelectedBosses] = useState<string[]>([])
-  const [showFilters, setShowFilters] = useState(false)
+  const [bosses, setBosses] = useState<Boss[]>([])
+  const [bossStatuses, setBossStatuses] = useState<BossStatusInfo[]>([])
+  const [loading, setLoading] = useState(true)
 
   // Lista de canais disponíveis
   const channels = ['Channel 1', 'Channel 2', 'Channel 3', 'Channel 4', 'Channel 5', 
@@ -39,6 +39,11 @@ export default function BossStatus() {
       return channelMatch && bossMatch
     })
   }
+
+  useEffect(() => {
+    // Adicionar ao objeto window para poder ser chamado pelo AdminPanel
+    (window as any).openBossStatusModal = () => setIsOpen(true)
+  }, [])
 
   useEffect(() => {
     // Busca bosses mortos e pendentes do Firestore
@@ -133,89 +138,79 @@ export default function BossStatus() {
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button className="flex items-center">
-          Status dos Bosses
-          {isOpen ? <ChevronUp className="ml-2 h-4 w-4" /> : <ChevronDown className="ml-2 h-4 w-4" />}
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-4xl">
-        <div className="flex items-center justify-between">
-          <DialogTitle className="text-lg font-semibold">Status dos Bosses</DialogTitle>
-          <div className="flex items-center">
-            <Dialog open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2 mr-8">
-                  <Filter className="h-4 w-4" />
-                  Filtros
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
-                <div className="flex items-center justify-between mb-4">
-                  <DialogTitle className="text-lg font-semibold">Filtros</DialogTitle>
-                </div>
-
-                {/* Filtros de Canal */}
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="font-medium mb-2">Canais</h4>
-                    <div className="grid grid-cols-3 gap-2">
-                      {channels.map((channel) => (
-                        <div key={channel} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={`channel-${channel}`}
-                            checked={selectedChannels.includes(channel)}
-                            onCheckedChange={(checked) => {
-                              setSelectedChannels(prev =>
-                                checked
-                                  ? [...prev, channel]
-                                  : prev.filter(ch => ch !== channel)
-                              )
-                            }}
-                          />
-                          <Label 
-                            htmlFor={`channel-${channel}`}
-                            className="text-sm text-foreground"
-                          >
-                            {channel}
-                          </Label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <Separator className="bg-border" />
-
-                  <div>
-                    <h4 className="font-medium mb-2">Bosses</h4>
-                    <div className="grid grid-cols-2 gap-2">
-                      {uniqueBossNames.map((bossName) => (
-                        <div key={bossName} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={`boss-${bossName}`}
-                            checked={selectedBosses.includes(bossName)}
-                            onCheckedChange={(checked) => {
-                              setSelectedBosses(prev =>
-                                checked
-                                  ? [...prev, bossName]
-                                  : prev.filter(name => name !== bossName)
-                              )
-                            }}
-                          />
-                          <Label 
-                            htmlFor={`boss-${bossName}`}
-                            className="text-sm text-foreground"
-                          >
-                            {bossName}
-                          </Label>
-                        </div>
-                      ))}
-                    </div>
+      <DialogContent className="max-w-[800px] max-h-[80vh]">
+        <div className="flex items-center justify-between mb-4">
+          <DialogTitle>Status dos Bosses</DialogTitle>
+          <Dialog open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2 mr-8">
+                <Filter className="h-4 w-4" />
+                Filtros
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Filtros</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-medium mb-2">Canais</h4>
+                  <div className="grid grid-cols-3 gap-2">
+                    {channels.map((channel) => (
+                      <div key={channel} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`channel-${channel}`}
+                          checked={selectedChannels.includes(channel)}
+                          onCheckedChange={(checked) => {
+                            setSelectedChannels(prev =>
+                              checked
+                                ? [...prev, channel]
+                                : prev.filter(ch => ch !== channel)
+                            )
+                          }}
+                        />
+                        <Label
+                          htmlFor={`channel-${channel}`}
+                          className="text-sm text-foreground"
+                        >
+                          {channel}
+                        </Label>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              </DialogContent>
-            </Dialog>
-          </div>
+
+                <Separator className="bg-border" />
+
+                <div>
+                  <h4 className="font-medium mb-2">Bosses</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    {uniqueBossNames.map((bossName) => (
+                      <div key={bossName} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`boss-${bossName}`}
+                          checked={selectedBosses.includes(bossName)}
+                          onCheckedChange={(checked) => {
+                            setSelectedBosses(prev =>
+                              checked
+                                ? [...prev, bossName]
+                                : prev.filter(name => name !== bossName)
+                            )
+                          }}
+                        />
+                        <Label
+                          htmlFor={`boss-${bossName}`}
+                          className="text-sm text-foreground"
+                        >
+                          {bossName}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <div className="relative">
@@ -257,7 +252,7 @@ export default function BossStatus() {
                 <div>
                   <h3 className="font-semibold mb-2 flex items-center gap-2">
                     <AlertCircle className="h-4 w-4 text-yellow-500" />
-                    Disponível em Breve para serem adicionados
+                    Próximos a Nascer
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     {filterBosses(bossStatuses.filter(boss => boss.status === 'soon'))
