@@ -13,16 +13,28 @@ export interface BossStatusInfo {
 export async function calculateBossStatuses(bosses: Boss[]): Promise<BossStatusInfo[]> {
   const bossStatuses: BossStatusInfo[] = []
   const now = new Date()
+  const processedBosses = new Set<string>() // Para evitar duplicações
 
-  // Debug: Listar todos os bosses mortos
-  console.log('=== Todos os bosses killed ===')
-  const killedBosses = bosses.filter(b => b.status === 'killed')
-  killedBosses.forEach(b => {
-    console.log(`${b.name} - ${b.channel} - ${b.spawnTime}`)
-  })
+  const killedBosses = bosses
+    .filter(b => b.status === 'killed')
+    // Ignora bosses mortos há mais de 48 horas
+    .filter(b => {
+      const killTime = parseISO(b.spawnTime)
+      const hoursSinceKill = differenceInHours(now, killTime)
+      return hoursSinceKill <= 48
+    })
+    // Ordena por spawnTime mais recente
+    .sort((a, b) => parseISO(b.spawnTime).getTime() - parseISO(a.spawnTime).getTime())
+    // Pega apenas o kill mais recente para cada boss+canal
+    .filter((boss, index, self) => 
+      index === self.findIndex(b => b.name === boss.name && b.channel === boss.channel)
+    )
 
   // Primeiro, processa todos os bosses killed
   for (const killedBoss of killedBosses) {
+    const bossKey = `${killedBoss.name}-${killedBoss.channel}`
+    if (processedBosses.has(bossKey)) continue // Pula se já processou este boss+canal
+
     // Verifica se existe um boss pendente para este boss/canal
     const isPending = bosses.some(
       b => b.name === killedBoss.name && 
@@ -31,7 +43,10 @@ export async function calculateBossStatuses(bosses: Boss[]): Promise<BossStatusI
     )
 
     // Se já existe um boss pendente, pula este boss
-    if (isPending) continue;
+    if (isPending) {
+      processedBosses.add(bossKey)
+      continue
+    }
 
     const lastKillTimeUTC = parseISO(killedBoss.spawnTime)
     const lastKillTime = addMinutes(lastKillTimeUTC, 5) // Adiciona 5 minutos ao tempo UTC
@@ -48,54 +63,37 @@ export async function calculateBossStatuses(bosses: Boss[]): Promise<BossStatusI
     const minutesUntilMaxRespawn = differenceInMinutes(maxRespawnTimeUTC, now)
     const minutesUntilEarlyAdd = differenceInMinutes(earlyAddTimeUTC, now)
 
-    // Debug log
-    console.log({
-      boss: killedBoss.name,
-      channel: killedBoss.channel,
-      lastKillTimeUTC: lastKillTimeUTC.toISOString(),
-      lastKillTimeWithOffset: lastKillTime.toISOString(),
-      minRespawnTimeUTC: minRespawnTimeUTC.toISOString(),
-      maxRespawnTimeUTC: maxRespawnTimeUTC.toISOString(),
-      earlyAddTimeUTC: earlyAddTimeUTC.toISOString(),
-      nowUTC: now.toISOString(),
-      minRespawnHours,
-      maxRespawnHours,
-      minutesUntilMinRespawn,
-      minutesUntilMaxRespawn,
-      minutesUntilEarlyAdd,
-      hoursUntilMinRespawn: minutesUntilMinRespawn / 60,
-      hoursUntilMaxRespawn: minutesUntilMaxRespawn / 60,
-      hoursUntilEarlyAdd: minutesUntilEarlyAdd / 60,
-      status: minutesUntilEarlyAdd <= 0 ? 'available' : 'waiting'
-    })
+    // Determina o status baseado no tempo até early add E tempo até respawn mínimo
+    let status: 'available' | 'soon' | 'waiting';
+    let timeRemaining: number;
 
-    if (minutesUntilEarlyAdd <= 0) {
-      // Boss pode ser adicionado (6 horas antes do tempo mínimo ou depois)
-      bossStatuses.push({
-        name: killedBoss.name,
-        channel: killedBoss.channel,
-        status: 'available',
-        lastKillTime
-      })
-    } else if (minutesUntilEarlyAdd <= 360) { // 6 horas (360 minutos) para poder adicionar
-      // Boss estará disponível em breve
-      bossStatuses.push({
-        name: killedBoss.name,
-        channel: killedBoss.channel,
-        status: 'soon',
-        timeRemaining: minutesUntilEarlyAdd,
-        lastKillTime
-      })
+    if (minutesUntilMinRespawn <= 0) {
+      // Se já passou do tempo mínimo de respawn, está disponível
+      status = 'available';
+      timeRemaining = 0;
+    } else if (minutesUntilEarlyAdd <= 0) {
+      // Se passou do early add mas não do respawn mínimo, está "soon"
+      status = 'soon';
+      timeRemaining = minutesUntilMinRespawn;
+    } else if (minutesUntilEarlyAdd <= 360) {
+      // Se está dentro da janela de 6 horas do early add
+      status = 'soon';
+      timeRemaining = minutesUntilEarlyAdd;
     } else {
-      // Boss ainda está em cooldown
-      bossStatuses.push({
-        name: killedBoss.name,
-        channel: killedBoss.channel,
-        status: 'waiting',
-        timeRemaining: minutesUntilEarlyAdd,
-        lastKillTime
-      })
+      // Se está além das 6 horas do early add
+      status = 'waiting';
+      timeRemaining = minutesUntilEarlyAdd;
     }
+
+    // Adiciona o status à lista
+    bossStatuses.push({
+      name: killedBoss.name,
+      channel: killedBoss.channel,
+      status,
+      timeRemaining: status !== 'available' ? timeRemaining : undefined,
+      lastKillTime
+    })
+    processedBosses.add(bossKey)
   }
 
   // Depois, adiciona status 'available' para canais sem boss killed ou pending
@@ -104,10 +102,8 @@ export async function calculateBossStatuses(bosses: Boss[]): Promise<BossStatusI
 
   for (const bossName of Object.keys(bossRespawnData)) {
     for (const channel of channels) {
-      // Verifica se já existe um status para este boss/canal
-      const existingStatus = bossStatuses.find(
-        s => s.name === bossName && s.channel === channel
-      )
+      const bossKey = `${bossName}-${channel}`
+      if (processedBosses.has(bossKey)) continue // Pula se já processou este boss+canal
 
       // Verifica se existe um boss pending
       const pendingBoss = bosses.find(
@@ -117,45 +113,39 @@ export async function calculateBossStatuses(bosses: Boss[]): Promise<BossStatusI
       )
 
       // Se não existe status e não existe pending, marca como available
-      if (!existingStatus && !pendingBoss) {
+      if (!pendingBoss) {
         bossStatuses.push({
           name: bossName,
           channel,
           status: 'available'
         })
+        processedBosses.add(bossKey)
       }
     }
   }
 
-  // Remove os status 'available' para bosses que já estão pendentes
-  const filteredStatuses = bossStatuses.filter(status => {
-    const isPending = bosses.some(
-      b => b.name === status.name && 
-      b.channel === status.channel && 
-      b.status === 'pending'
-    )
-    return !isPending || status.status !== 'available'
-  })
-
-  // Debug: Mostrar todos os status calculados
-  console.log('=== Todos os status calculados ===')
-  filteredStatuses.forEach(status => {
-    console.log(`${status.name} - ${status.channel} - ${status.status} - ${status.timeRemaining}min`)
-  })
-
-  // Ordena por status (available -> soon -> waiting -> deleted) e depois por tempo restante
-  return filteredStatuses.sort((a, b) => {
-    const statusOrder = { available: 0, soon: 1, waiting: 2, deleted: 3 }
+  // Ordena por status (available -> soon -> waiting) e depois por nome
+  return bossStatuses.sort((a, b) => {
+    const statusOrder: Record<BossStatusInfo['status'], number> = { 
+      available: 0, 
+      soon: 1, 
+      waiting: 2,
+      deleted: 3 
+    }
+    
     if (statusOrder[a.status] !== statusOrder[b.status]) {
       return statusOrder[a.status] - statusOrder[b.status]
     }
-    if (a.timeRemaining && b.timeRemaining) {
-      return a.timeRemaining - b.timeRemaining
-    }
+    
+    // Comparação por nome
     if (a.name !== b.name) {
       return a.name.localeCompare(b.name)
     }
-    return (a.channel || '').localeCompare(b.channel || '')
+    
+    // Comparação por canal, com verificação de undefined
+    const channelA = a.channel || ''
+    const channelB = b.channel || ''
+    return channelA.localeCompare(channelB)
   })
 }
 
