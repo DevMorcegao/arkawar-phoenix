@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -34,6 +34,7 @@ import { Boss } from "@/app/types/boss"
 import { toast } from "react-hot-toast"
 import { useAuth } from "@/contexts/AuthContext"
 import { cn } from "@/lib/utils"
+import { useRouter, useSearchParams } from 'next/navigation'
 
 interface FirebaseUser extends UserInfo {
   role?: string
@@ -42,45 +43,66 @@ interface FirebaseUser extends UserInfo {
 export default function AdminPanel() {
   const [users, setUsers] = useState<FirebaseUser[]>([])
   const [allBosses, setAllBosses] = useState<Boss[]>([])
-  const [showUsers, setShowUsers] = useState(false)
-  const [showBossTracker, setShowBossTracker] = useState(false)
-  const [showAllBosses, setShowAllBosses] = useState(false)
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [sortBy, setSortBy] = useState<'time' | 'name' | 'channel'>('time')
   const [openChangeRole, setOpenChangeRole] = useState(false)
   const [openRemoveUser, setOpenRemoveUser] = useState(false)
   const [selectedUser, setSelectedUser] = useState<FirebaseUser | null>(null)
   const { user, isAdmin } = useAuth()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  
+  // Pega todas as seções ativas da URL
+  const activeSections = searchParams.getAll('section')
 
-  const handleAddUser = async () => {
-    const email = prompt('Digite o email do usuário:')
-    if (!email) return
+  // Monitora mudanças nas seções ativas para abrir/fechar modais quando necessário
+  useEffect(() => {
+    if (typeof window === 'undefined') return
 
-    try {
-      // Verificar se o usuário já existe
-      const usersRef = collection(db, 'users')
-      const q = query(usersRef, where('email', '==', email))
-      const querySnapshot = await getDocs(q)
-
-      if (!querySnapshot.empty) {
-        toast.error('Usuário já existe.')
-        return
+    // Gerencia o modal de boss-drops
+    if (activeSections.includes('boss-drops')) {
+      if ((window as any).openBossDropsModal) {
+        (window as any).openBossDropsModal()
       }
-
-      // Criar novo usuário
-      const newUser = {
-        email,
-        role: 'user',
-        createdAt: serverTimestamp()
+    } else {
+      if ((window as any).closeBossDropsModal) {
+        (window as any).closeBossDropsModal()
       }
-
-      await setDoc(doc(usersRef), newUser)
-      toast.success('Usuário adicionado com sucesso!')
-    } catch (error) {
-      console.error('Error adding user:', error)
-      toast.error('Erro ao adicionar usuário.')
     }
-  }
+
+    // Gerencia o modal de boss-status
+    if (activeSections.includes('boss-status')) {
+      if ((window as any).openBossStatusModal) {
+        (window as any).openBossStatusModal()
+      }
+    } else {
+      if ((window as any).closeBossStatusModal) {
+        (window as any).closeBossStatusModal()
+      }
+    }
+  }, [activeSections])
+
+  // Função para atualizar as seções na URL
+  const toggleSection = useCallback((sectionName: string) => {
+    const newSearchParams = new URLSearchParams(searchParams.toString())
+    
+    if (activeSections.includes(sectionName)) {
+      // Remove a seção se já estiver ativa
+      const sections = activeSections.filter(s => s !== sectionName)
+      newSearchParams.delete('section') // Remove todos
+      sections.forEach(s => newSearchParams.append('section', s)) // Adiciona os que sobraram
+    } else {
+      // Adiciona a nova seção mantendo as existentes
+      newSearchParams.append('section', sectionName)
+    }
+
+    // Se não houver seções, volta para /admin
+    const newUrl = newSearchParams.toString() 
+      ? `/admin?${newSearchParams.toString()}`
+      : '/admin'
+    
+    router.push(newUrl)
+  }, [searchParams, router, activeSections])
 
   useEffect(() => {
     if (!user) return
@@ -339,57 +361,79 @@ export default function AdminPanel() {
       <CardContent>
         <div className="flex flex-wrap gap-4 mb-6">
           <Button
-            onClick={() => setShowUsers(!showUsers)}
-            className="flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600"
+            onClick={() => toggleSection('users')}
+            className={cn(
+              "flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600",
+              activeSections.includes('users') && "bg-orange-600"
+            )}
           >
             <Users className="h-4 w-4" />
             Usuários
-            {showUsers ? <ChevronUp className="ml-2 h-4 w-4" /> : <ChevronDown className="ml-2 h-4 w-4" />}
+            <ChevronDown className={cn(
+              "ml-2 h-4 w-4 transition-transform",
+              activeSections.includes('users') && "rotate-180"
+            )} />
           </Button>
           <Button
-            onClick={() => setShowBossTracker(!showBossTracker)}
-            className="flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600"
+            onClick={() => toggleSection('boss-tracker')}
+            className={cn(
+              "flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600",
+              activeSections.includes('boss-tracker') && "bg-orange-600"
+            )}
           >
             <Timer className="h-4 w-4" />
             Boss Tracker
-            {showBossTracker ? <ChevronUp className="ml-2 h-4 w-4" /> : <ChevronDown className="ml-2 h-4 w-4" />}
+            <ChevronDown className={cn(
+              "ml-2 h-4 w-4 transition-transform",
+              activeSections.includes('boss-tracker') && "rotate-180"
+            )} />
           </Button>
           <Button
-            onClick={() => setShowAllBosses(!showAllBosses)}
-            className="flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600"
+            onClick={() => toggleSection('all-bosses')}
+            className={cn(
+              "flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600",
+              activeSections.includes('all-bosses') && "bg-orange-600"
+            )}
           >
             <ListChecks className="h-4 w-4" />
             Todos os Bosses
-            {showAllBosses ? <ChevronUp className="ml-2 h-4 w-4" /> : <ChevronDown className="ml-2 h-4 w-4" />}
+            <ChevronDown className={cn(
+              "ml-2 h-4 w-4 transition-transform",
+              activeSections.includes('all-bosses') && "rotate-180"
+            )} />
           </Button>
           <Button
-            className="flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600"
-            onClick={() => {
-              if (typeof window !== 'undefined' && (window as any).openBossDropsModal) {
-                (window as any).openBossDropsModal()
-              }
-            }}
+            onClick={() => toggleSection('boss-drops')}
+            className={cn(
+              "flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600",
+              activeSections.includes('boss-drops') && "bg-orange-600"
+            )}
           >
             <Swords className="h-4 w-4" />
             Drops dos Bosses
-            <ChevronDown className="ml-2 h-4 w-4" />
+            <ChevronDown className={cn(
+              "ml-2 h-4 w-4 transition-transform",
+              activeSections.includes('boss-drops') && "rotate-180"
+            )} />
           </Button>
           <Button
-            className="flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600"
-            onClick={() => {
-              if (typeof window !== 'undefined' && (window as any).openBossStatusModal) {
-                (window as any).openBossStatusModal()
-              }
-            }}
+            onClick={() => toggleSection('boss-status')}
+            className={cn(
+              "flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600",
+              activeSections.includes('boss-status') && "bg-orange-600"
+            )}
           >
             <Shield className="h-4 w-4" />
             Status dos Bosses
-            <ChevronDown className="ml-2 h-4 w-4" />
+            <ChevronDown className={cn(
+              "ml-2 h-4 w-4 transition-transform",
+              activeSections.includes('boss-status') && "rotate-180"
+            )} />
           </Button>
         </div>
 
         {/* Conteúdo */}
-        {showUsers && (
+        {activeSections.includes('users') && (
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">Usuários</h3>
@@ -508,14 +552,19 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {showBossTracker && (
-          <div className="mt-4">
+        {activeSections.includes('boss-tracker') && (
+          <div className={cn(
+            activeSections.includes('users') && "mt-4"
+          )}>
             <BossTracker />
           </div>
         )}
 
-        {showAllBosses && (
-          <div className="mt-4">
+        {activeSections.includes('all-bosses') && (
+          <div className={cn(
+            "space-y-4",
+            (activeSections.includes('users') || activeSections.includes('boss-tracker')) && "mt-4"
+          )}>
             <div className="flex justify-between items-center mb-4">
               <div>
                 <h3 className="text-lg font-semibold">Bosses Detectados</h3>
@@ -587,6 +636,7 @@ export default function AdminPanel() {
           </div>
         )}
 
+        {/* Modais */}
         <BossDrops />
         <BossStatus />
       </CardContent>

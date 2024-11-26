@@ -514,18 +514,32 @@ export default function PartyManager() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-6">
+    <div className="min-h-screen bg-background p-6 rounded-lg">
       <Toaster position="top-right" />
       <div className="max-w-7xl mx-auto space-y-6">
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid grid-cols-1 gap-4 bg-card rounded-lg p-6">
           <h1 className="text-3xl font-bold text-primary text-center">PT&apos;S ARKA WAR GUILD PHOENIX</h1>
           {isAdmin && !partiesRegistered && (
             <div className="flex flex-wrap justify-center gap-2">
-              <Button onClick={autoOrganizeParties}>Auto-Organizar Parties</Button>
-              <Button onClick={addNewParty}>Adicionar Nova Party</Button>
+              <Button 
+                onClick={autoOrganizeParties}
+                className="flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600"
+              >
+                Auto-Organizar Parties
+              </Button>
+              <Button 
+                onClick={addNewParty}
+                className="flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600"
+              >
+                Adicionar Nova Party
+              </Button>
               <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button>Importar Personagens</Button>
+                  <Button
+                    className="flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600"
+                  >
+                    Importar Personagens
+                  </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[425px]">
                   <DialogHeader>
@@ -553,12 +567,22 @@ export default function PartyManager() {
                   </div>
                 </DialogContent>
               </Dialog>
-              <Button onClick={registerParties}>Registrar Parties</Button>
+              <Button 
+                onClick={registerParties}
+                className="flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600"
+              >
+                Registrar Parties
+              </Button>
             </div>
           )}
           {isAdmin && partiesRegistered && (
             <div className="flex justify-center">
-              <Button onClick={editParties}>Editar Parties</Button>
+              <Button 
+                onClick={editParties}
+                className="flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600"
+              >
+                Editar Parties
+              </Button>
             </div>
           )}
         </div>
@@ -744,7 +768,7 @@ export default function PartyManager() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={addNewCharacter} className="mt-6">
+                <Button onClick={addNewCharacter} className="flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600 mt-6">
                   <Plus className="mr-2 h-4 w-4" /> Adicionar
                 </Button>
               </div>

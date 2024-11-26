@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { bossDropData } from '@/app/data/bossDropData'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -8,18 +8,43 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 
+// Estender a interface Window
+declare global {
+  interface Window {
+    openBossDropsModal: () => void
+    closeBossDropsModal: () => void
+  }
+}
+
 export default function BossDrops() {
   const [selectedBoss, setSelectedBoss] = useState<string>("")
   const [isOpen, setIsOpen] = useState(false)
 
-  useEffect(() => {
-    (window as any).openBossDropsModal = () => setIsOpen(true)
+  // Criar funções estáveis com useCallback
+  const openModal = useCallback(() => {
+    setIsOpen(true)
   }, [])
+
+  const closeModal = useCallback(() => {
+    setIsOpen(false)
+  }, [])
+
+  useEffect(() => {
+    // Registra as funções de abrir e fechar no objeto window
+    window.openBossDropsModal = openModal
+    window.closeBossDropsModal = closeModal
+
+    // Limpa as funções quando o componente é desmontado
+    return () => {
+      window.openBossDropsModal = () => {}
+      window.closeBossDropsModal = () => {}
+    }
+  }, [openModal, closeModal])
 
   const bosses = Object.keys(bossDropData)
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={() => setIsOpen(!isOpen)}>
       <DialogContent className="max-w-[800px] max-h-[80vh]" data-boss-drops-dialog>
         <DialogHeader>
           <DialogTitle>Drops dos Bosses</DialogTitle>

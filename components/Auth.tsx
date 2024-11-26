@@ -9,26 +9,45 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useTheme } from "next-themes"
 import { Sun, Moon } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { toast } from "react-hot-toast"
+import { ThemeLoadingScreen } from "@/components/ThemeLoadingScreen"
 
 export default function Auth() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const { register, login } = useAuth()
+  const router = useRouter()
   const { theme, setTheme } = useTheme()
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsLoading(true)
     setError("")
-    const formData = new FormData(e.currentTarget)
-    const email = formData.get("email") as string
-    const password = formData.get("password") as string
 
     try {
+      const formData = new FormData(e.currentTarget)
+      const email = formData.get("email") as string
+      const password = formData.get("password") as string
+
+      // Faz login
       await login(email, password)
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
+      // Mostra o toast.success após 1.5s
+      await new Promise(resolve => setTimeout(resolve, 1500))
+
+      // Redireciona para /parties
+      router.replace('/parties')
+
+      // Mostra o toast após o redirecionamento
+      toast.success("Login realizado com sucesso!", {
+        duration: 2000,
+      })
+
     } catch (error) {
+      console.error("Erro no login:", error)
       setError("Falha no login. Verifique suas credenciais.")
+      toast.error("Falha no login. Verifique suas credenciais.")
     } finally {
       setIsLoading(false)
     }
@@ -38,19 +57,39 @@ export default function Auth() {
     e.preventDefault()
     setIsLoading(true)
     setError("")
-    const formData = new FormData(e.currentTarget)
-    const name = formData.get("name") as string
-    const email = formData.get("email") as string
-    const password = formData.get("password") as string
 
     try {
+      const formData = new FormData(e.currentTarget)
+      const name = formData.get("name") as string
+      const email = formData.get("email") as string
+      const password = formData.get("password") as string
+
+      // Faz o registro
       await register(email, password, name)
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
+      // Mostra o toast.success após 1.5s
+      await new Promise(resolve => setTimeout(resolve, 1500))
+
+      // Redireciona para /parties
+      router.replace('/parties')
+
+      // Mostra o toast após o redirecionamento
+      toast.success("Registro realizado com sucesso!", {
+        duration: 2000,
+      })
+
     } catch (error) {
+      console.error("Erro no registro:", error)
       setError("Falha no registro. Tente novamente.")
+      toast.error("Falha no registro. Tente novamente.")
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Se estiver carregando, mostra o ThemeLoadingScreen
+  if (isLoading) {
+    return <ThemeLoadingScreen />
   }
 
   return (
@@ -72,12 +111,13 @@ export default function Auth() {
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" name="email" type="email" placeholder="seu@email.com" required />
+                  <Input id="email" name="email" type="email" placeholder="seu@email.com" required disabled={isLoading} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Senha</Label>
-                  <Input id="password" name="password" type="password" required />
+                  <Input id="password" name="password" type="password" required disabled={isLoading} />
                 </div>
+                {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
                 <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white" disabled={isLoading}>
                   {isLoading ? "Entrando..." : "Entrar"}
                 </Button>
@@ -87,32 +127,32 @@ export default function Auth() {
               <form onSubmit={handleRegister} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">Nome</Label>
-                  <Input id="name" name="name" placeholder="Seu nome" required />
+                  <Input id="name" name="name" placeholder="Seu nome" required disabled={isLoading} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" name="email" type="email" placeholder="seu@email.com" required />
+                  <Input id="email" name="email" type="email" placeholder="seu@email.com" required disabled={isLoading} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Senha</Label>
-                  <Input id="password" name="password" type="password" required />
+                  <Input id="password" name="password" type="password" required disabled={isLoading} />
                 </div>
+                {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
                 <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white" disabled={isLoading}>
                   {isLoading ? "Registrando..." : "Registrar"}
                 </Button>
               </form>
             </TabsContent>
           </Tabs>
-          {error && <p className="text-red-500 text-center mt-4">{error}</p>}
         </CardContent>
-        <CardFooter className="flex justify-between">
-          <p className="text-sm text-gray-600 dark:text-gray-400">Arka War Guild Phoenix &copy; 2024</p>
+        <CardFooter className="flex justify-center">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+            className="rounded-full w-8 h-8"
           >
-            {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+            {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
           </Button>
         </CardFooter>
       </Card>

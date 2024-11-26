@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -14,6 +14,14 @@ import { cn } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+
+// Estender a interface Window
+declare global {
+  interface Window {
+    openBossStatusModal: () => void
+    closeBossStatusModal: () => void
+  }
+}
 
 export default function BossStatus() {
   const [isOpen, setIsOpen] = useState(false)
@@ -40,10 +48,26 @@ export default function BossStatus() {
     })
   }
 
-  useEffect(() => {
-    // Adicionar ao objeto window para poder ser chamado pelo AdminPanel
-    (window as any).openBossStatusModal = () => setIsOpen(true)
+  // Criar funções estáveis com useCallback
+  const openModal = useCallback(() => {
+    setIsOpen(true)
   }, [])
+
+  const closeModal = useCallback(() => {
+    setIsOpen(false)
+  }, [])
+
+  useEffect(() => {
+    // Registra as funções de abrir e fechar no objeto window
+    window.openBossStatusModal = openModal
+    window.closeBossStatusModal = closeModal
+
+    // Limpa as funções quando o componente é desmontado
+    return () => {
+      window.openBossStatusModal = () => {}
+      window.closeBossStatusModal = () => {}
+    }
+  }, [openModal, closeModal])
 
   useEffect(() => {
     // Busca bosses mortos e pendentes do Firestore

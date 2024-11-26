@@ -1,73 +1,45 @@
-'use client'
+'use client';
 
-import { ThemeProvider as NextThemesProvider, useTheme } from 'next-themes'
-import { ThemeLoadingScreen } from '@/components/ThemeLoadingScreen'
-import { useState, useEffect, useCallback } from 'react'
+import { ThemeProvider as NextThemesProvider, useTheme } from 'next-themes';
+import { ThemeLoadingScreen } from '@/components/ThemeLoadingScreen';
+import { useEffect, useState } from 'react';
 
 function ThemeWrapper({ children }: { children: React.ReactNode }) {
-  const [isThemeChanging, setIsThemeChanging] = useState(false);
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const [loading, setLoading] = useState(true); // Carregamento inicial e troca de tema
+  const { resolvedTheme } = useTheme(); // Use `resolvedTheme` para garantir o estado real do tema
 
-  // Função para mudar o tema com a sequência correta
-  const handleThemeChange = useCallback((newTheme: string) => {
-    // 1. Mostra a animação imediatamente
-    setIsThemeChanging(true);
-
-    // 2. Aguarda 500ms com a animação visível
-    const totalDuration = 2000; // Tempo total da animação
-    const themeChangeDelay = 700; // Momento em que o tema muda
-
-    // 3. Muda o tema no meio da animação
-    setTimeout(() => {
-      setTheme(newTheme);
-    }, themeChangeDelay);
-
-    // 4. Remove a animação após o tempo total
-    setTimeout(() => {
-      setIsThemeChanging(false);
-    }, totalDuration);
-  }, [setTheme]);
-
-  // Sobrescreve a função setTheme do next-themes
+  // Controla o estado de carregamento inicial
   useEffect(() => {
-    if (window) {
-      const originalSetTheme = (window as any).__next?.setTheme;
-      if (originalSetTheme) {
-        (window as any).__next.setTheme = handleThemeChange;
-      }
-      return () => {
-        if (originalSetTheme) {
-          (window as any).__next.setTheme = originalSetTheme;
-        }
-      };
-    }
-  }, [handleThemeChange]);
+    const timer = setTimeout(() => {
+      setLoading(false); // Desativa o carregamento após 2 segundos
+    }, 2000);
 
-  // Monitora mudanças no tema (para mudanças do tema do sistema)
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Monitora mudanças de tema
   useEffect(() => {
-    if (theme && resolvedTheme) {
-      setIsThemeChanging(true);
-      
-      const totalDuration = 2000;
-      const themeChangeDelay = 700;
+    if (!loading && resolvedTheme) {
+      setLoading(true);
+      const timer = setTimeout(() => {
+        setLoading(false); // Exibe loading rapidamente para mudanças de tema
+      }, 2000);
 
-      setTimeout(() => {
-        setIsThemeChanging(false);
-      }, totalDuration);
+      return () => clearTimeout(timer);
     }
-  }, [theme, resolvedTheme]);
+  }, [resolvedTheme]);
 
-  return (
-    <>
-      <ThemeLoadingScreen isVisible={isThemeChanging} />
-      {children}
-    </>
-  );
+  // Renderiza a tela de loading enquanto o estado `loading` estiver ativo
+  if (loading) {
+    return <ThemeLoadingScreen />;
+  }
+
+  return <>{children}</>;
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   return (
-    <NextThemesProvider attribute="class" defaultTheme="system" enableSystem>
+    <NextThemesProvider attribute="class" defaultTheme="dark" enableSystem>
       <ThemeWrapper>{children}</ThemeWrapper>
     </NextThemesProvider>
   );
