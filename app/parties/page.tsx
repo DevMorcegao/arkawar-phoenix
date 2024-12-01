@@ -2,9 +2,9 @@
 
 import { useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import ArkaWarManager from '@/components/ArkaWarManager'
 import { useRouter } from 'next/navigation'
 import { ThemeLoadingScreen } from '@/components/ThemeLoadingScreen'
+import ArkaWarManager from '@/components/ArkaWarManager'
 
 export default function PartiesPage() {
   const { user, loading } = useAuth()

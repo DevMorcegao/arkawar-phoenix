@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { logger } from '@/lib/logger'
 
 interface BossListProps {
   bosses: Boss[]
@@ -63,7 +64,7 @@ const BossList: React.FC<BossListProps> = ({ bosses, onSort, onRemove, onUpdateS
       </div>
       <div className="space-y-2">
         {bosses.map((boss) => {
-          console.log('BossList: Rendering BossCard for boss:', boss.id)
+          logger.debug('BossList', 'Rendering BossCard', { bossId: boss.id })
           return (
             <BossCard
               key={boss.id}
@@ -71,7 +72,7 @@ const BossList: React.FC<BossListProps> = ({ bosses, onSort, onRemove, onUpdateS
               onRemove={onRemove}
               onUpdateStatus={onUpdateStatus}
               onEdit={(updatedBoss) => {
-                console.log('BossList: Calling onEdit for boss:', updatedBoss)
+                logger.debug('BossList', 'Calling onEdit', { updatedBoss })
                 return onEdit(updatedBoss)
               }}
             />

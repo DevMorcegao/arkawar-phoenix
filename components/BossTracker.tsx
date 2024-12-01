@@ -18,6 +18,7 @@ import { addHours, addMinutes, subMinutes } from 'date-fns'
 import { differenceInHours, differenceInMinutes } from 'date-fns'
 import { initializeOCRWorker, processImage } from '@/app/utils/ocrProcessor'
 import { cn } from '@/lib/utils'
+import { logger } from '@/lib/logger'
 
 const BossTracker: React.FC = () => {
   const [bosses, setBosses] = useState<Boss[]>([])
@@ -38,6 +39,7 @@ const BossTracker: React.FC = () => {
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const updatedBosses = snapshot.docs.map(doc => ({
+
         id: doc.id,
         ...doc.data(),
         lastUpdated: doc.data().lastUpdated?.toDate() || null,
@@ -84,26 +86,26 @@ const BossTracker: React.FC = () => {
   }
 
   const processBossInfo = async (text: string, image?: any): Promise<Boss | null> => {
-    console.log('Processing text:', text)
+    logger.debug('BossTracker', 'Processing text', { text })
     
     const bossInfo = await findBossByText(text, image, bossData)
     if (!bossInfo) {
-      console.log('No boss found in text')
+      logger.warn('BossTracker', 'No boss found in text')
       return null
     }
-  
+
     const timeInfo = extractTimeFromText(text)
     if (!timeInfo) {
-      console.log('No time information found')
+      logger.warn('BossTracker', 'No time information found')
       return null
     }
-  
+
     const channel = extractChannelFromText(text)
-    console.log('Channel found:', channel)
-  
+    logger.debug('BossTracker', 'Channel found', { channel })
+
     const spawnTime = calculateSpawnTime(timeInfo.hours, timeInfo.minutes)
-    console.log('Calculated spawn time:', spawnTime)
-  
+    logger.debug('BossTracker', 'Calculated spawn time', { spawnTime })
+
     return {
       id: `boss-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       name: bossInfo.name,
@@ -125,32 +127,32 @@ const BossTracker: React.FC = () => {
     setIsProcessing(true)
     try {
       const worker = await initializeOCRWorker()
-      console.log('Tesseract worker initialized')
+      logger.info('BossTracker', 'Tesseract worker initialized')
 
       for (const file of acceptedFiles) {
         try {
-          console.log(`Processing file: ${file.name}`)
+          logger.debug('BossTracker', 'Processing file', { fileName: file.name })
           const text = await processImage(file, worker)
-          console.log('OCR result:', text)
+          logger.debug('BossTracker', 'OCR result', { text })
           
           const bossInfo = await processBossInfo(text, file)
           if (bossInfo) {
-            console.log('Boss info extracted:', bossInfo)
+            logger.debug('BossTracker', 'Boss info extracted', { bossInfo })
             setPendingBoss(bossInfo)
           } else {
-            console.log('No boss info found in the image')
+            logger.warn('BossTracker', 'No boss info found in image', { fileName: file.name })
             toast.error(`Nenhuma informação de boss encontrada na imagem ${file.name}`)
           }
         } catch (error) {
-          console.error('Error processing image:', error)
+          logger.error('BossTracker', 'Error processing image', { error, fileName: file.name })
           toast.error(`Erro ao processar imagem ${file.name}. Tente novamente.`)
         }
       }
 
       await worker.terminate()
-      console.log('Tesseract worker terminated')
+      logger.info('BossTracker', 'Tesseract worker terminated')
     } catch (error) {
-      console.error('Error creating Tesseract worker:', error)
+      logger.error('BossTracker', 'Error creating Tesseract worker', { error })
       toast.error('Erro ao iniciar o processamento de imagens. Tente novamente.')
     } finally {
       setIsProcessing(false)
@@ -176,6 +178,7 @@ const BossTracker: React.FC = () => {
       // Encontrar o registro mais recente localmente
       const sortedDocs = snapshot.docs
         .map(doc => ({
+
           ...doc.data(),
           spawnTime: doc.data().spawnTime,
         }))
@@ -210,7 +213,7 @@ const BossTracker: React.FC = () => {
 
       return { canSpawn: true }
     } catch (error) {
-      console.error('Error checking boss respawn time:', error)
+      logger.error('BossTracker', 'Error checking boss respawn time', { error })
       return { canSpawn: true } // Em caso de erro, permite adicionar
     }
   }
@@ -227,7 +230,7 @@ const BossTracker: React.FC = () => {
       const snapshot = await getDocs(q)
       return !snapshot.empty
     } catch (error) {
-      console.error('Error checking duplicate boss:', error)
+      logger.error('BossTracker', 'Error checking duplicate boss', { error })
       return false // Em caso de erro, permite adicionar
     }
   }
@@ -279,7 +282,7 @@ const BossTracker: React.FC = () => {
         setPendingBoss(null)
         toast.success(`Boss ${updatedBoss.name} adicionado à lista.`)
       } catch (error) {
-        console.error('Error saving boss data:', error)
+        logger.error('BossTracker', 'Error saving boss data', { error })
         toast.error('Erro ao salvar dados do boss. Tente novamente.')
       }
     } else {
@@ -296,10 +299,10 @@ const BossTracker: React.FC = () => {
   };
 
   const handleUpdateStatus = async (id: string, status: 'killed' | 'noshow') => {
-    console.log('BossTracker: handleUpdateStatus called', { id, status })
+    logger.debug('BossTracker', 'handleUpdateStatus called', { id, status })
     
     if (!user) {
-      console.log('BossTracker: No user found')
+      logger.warn('BossTracker', 'No user found')
       toast.error('Você precisa estar logado para realizar esta ação.')
       return
     }
@@ -309,7 +312,7 @@ const BossTracker: React.FC = () => {
       const bossDoc = await getDoc(bossRef)
       
       if (!bossDoc.exists()) {
-        console.log('BossTracker: Boss not found')
+        logger.warn('BossTracker', 'Boss not found')
         toast.error('Boss não encontrado.')
         return
       }
@@ -317,7 +320,7 @@ const BossTracker: React.FC = () => {
       // Verificar se o usuário tem permissão para atualizar
       const bossData = bossDoc.data()
       if (bossData.userId !== user.uid) {
-        console.log('BossTracker: User does not have permission', { userId: user.uid, bossUserId: bossData.userId })
+        logger.warn('BossTracker', 'User does not have permission', { userId: user.uid, bossUserId: bossData.userId })
         toast.error('Você não tem permissão para atualizar este boss.')
         return
       }
@@ -337,27 +340,26 @@ const BossTracker: React.FC = () => {
         }
       }
 
-      console.log('BossTracker: Updating boss status', { id, status })
+      logger.debug('BossTracker', 'Updating boss status', { id, status })
       await updateDoc(bossRef, {
         status,
         appearanceStatus: status,
         lastUpdated: serverTimestamp()
       })
 
-      // Não precisamos atualizar o estado local pois o onSnapshot já vai cuidar disso
-      console.log('BossTracker: Boss status updated successfully')
+      logger.info('BossTracker', 'Boss status updated successfully')
       toast.success(status === 'killed' ? 'Boss marcado como morto!' : 'Boss marcado como não aparecido!')
     } catch (error) {
-      console.error('BossTracker: Error updating boss status:', error)
+      logger.error('BossTracker', 'Error updating boss status', { error })
       toast.error('Erro ao atualizar o status do boss.')
     }
   }
 
   const handleRemoveBoss = async (id: string) => {
-    console.log('BossTracker: handleRemoveBoss called', { id })
+    logger.debug('BossTracker', 'handleRemoveBoss called', { id })
     
     if (!user) {
-      console.log('BossTracker: No user found')
+      logger.warn('BossTracker', 'No user found')
       toast.error('Você precisa estar logado para realizar esta ação.')
       return
     }
@@ -367,7 +369,7 @@ const BossTracker: React.FC = () => {
       const bossDoc = await getDoc(bossRef)
       
       if (!bossDoc.exists()) {
-        console.log('BossTracker: Boss not found')
+        logger.warn('BossTracker', 'Boss not found')
         toast.error('Boss não encontrado.')
         return
       }
@@ -375,28 +377,28 @@ const BossTracker: React.FC = () => {
       // Verificar se o usuário tem permissão para remover
       const bossData = bossDoc.data()
       if (bossData.userId !== user.uid) {
-        console.log('BossTracker: User does not have permission', { userId: user.uid, bossUserId: bossData.userId })
+        logger.warn('BossTracker', 'User does not have permission', { userId: user.uid, bossUserId: bossData.userId })
         toast.error('Você não tem permissão para remover este boss.')
         return
       }
 
-      console.log('BossTracker: Marking boss as deleted', { id })
+      logger.debug('BossTracker', 'Marking boss as deleted', { id })
       await updateDoc(bossRef, {
         status: 'deleted',
         appearanceStatus: 'deleted',
         lastUpdated: serverTimestamp()
       })
 
-      console.log('BossTracker: Boss marked as deleted successfully')
+      logger.info('BossTracker', 'Boss marked as deleted successfully')
       toast.success('Boss removido com sucesso.')
     } catch (error) {
-      console.error('BossTracker: Error removing boss:', error)
+      logger.error('BossTracker', 'Error removing boss', { error })
       toast.error('Erro ao remover o boss.')
     }
   }
 
   const handleEditBoss = async (updatedBoss: Boss) => {
-    console.log('BossTracker: handleEditBoss called with:', updatedBoss)
+    logger.debug('BossTracker', 'handleEditBoss called', { updatedBoss })
     if (!user) {
       toast.error('Você precisa estar logado para editar um boss.')
       return
@@ -433,12 +435,12 @@ const BossTracker: React.FC = () => {
         status: updatedBoss.status || 'pending'
       }
 
-      console.log('BossTracker: Updating boss with data:', updateData)
+      logger.debug('BossTracker', 'Updating boss', { updateData })
       await setDoc(bossRef, updateData, { merge: true })
-      console.log('BossTracker: Boss updated successfully')
+      logger.info('BossTracker', 'Boss updated successfully')
       toast.success('Boss atualizado com sucesso!')
     } catch (error) {
-      console.error('BossTracker: Error updating boss:', error)
+      logger.error('BossTracker', 'Error updating boss', { error })
       toast.error('Erro ao atualizar o boss. Tente novamente.')
     }
   }
@@ -450,7 +452,7 @@ const BossTracker: React.FC = () => {
         if (items[i].type.indexOf('image') !== -1) {
           const blob = items[i].getAsFile()
           if (blob) {
-            console.log('Image pasted, processing...')
+            logger.debug('BossTracker', 'Image pasted, processing...')
             onDrop([blob])
           }
         }

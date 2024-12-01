@@ -17,14 +17,12 @@ import { collection, query, updateDoc, doc, deleteDoc, onSnapshot, getDoc, serve
 import { UserInfo } from "firebase/auth"
 import { 
   ChevronDown,
-  ChevronUp,
   Shield,
   Users,
   Swords,
   Timer,
   ListChecks,
-  Trash2, 
-  UserPlus 
+  Trash2
 } from 'lucide-react'
 import BossTracker from "./BossTracker"
 import BossCard from "./BossCard"
@@ -35,6 +33,7 @@ import { toast } from "react-hot-toast"
 import { useAuth } from "@/contexts/AuthContext"
 import { cn } from "@/lib/utils"
 import { useRouter, useSearchParams } from 'next/navigation'
+import { logger } from '@/lib/logger'
 
 interface FirebaseUser extends UserInfo {
   role?: string
@@ -181,7 +180,7 @@ export default function AdminPanel() {
       })
       toast.success(`Papel do usuário atualizado para: ${newRole}`)
     } catch (error) {
-      console.error('Error updating user role:', error)
+      logger.error('AdminPanel', 'Error updating user role', { error, userId, newRole })
       toast.error('Erro ao atualizar o papel do usuário. Tente novamente.')
     }
   }
@@ -196,7 +195,7 @@ export default function AdminPanel() {
       await deleteDoc(doc(db, "users", userId))
       toast.success('Usuário removido com sucesso.')
     } catch (error) {
-      console.error('Error deleting user:', error)
+      logger.error('AdminPanel', 'Error deleting user', { error })
       toast.error('Erro ao remover o usuário. Tente novamente.')
     }
   }

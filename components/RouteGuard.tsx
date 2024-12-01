@@ -4,6 +4,7 @@ import { useEffect, useState, useContext } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter, usePathname } from 'next/navigation'
 import React from 'react'
+import { logger } from '@/lib/logger'
 
 const publicPaths = ['/login']
 
@@ -19,7 +20,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   const [isAuthenticating, setIsAuthenticating] = useState(false)
 
   useEffect(() => {
-    console.log('🛡️ RouteGuard:', { 
+    logger.debug('RouteGuard', 'Route state', { 
       user: user?.email,
       loading,
       pathname,
@@ -30,10 +31,10 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     // Não redireciona se estiver no processo de autenticação
     if (!loading && !isAuthenticating) {
       if (!user && !publicPaths.includes(pathname)) {
-        console.log('🔒 Rota protegida, redirecionando para /login')
+        logger.info('RouteGuard', 'Redirecting to login - protected route')
         router.replace('/login')
       } else if (user && publicPaths.includes(pathname)) {
-        console.log('🔓 Usuário autenticado em rota pública, redirecionando para /parties')
+        logger.info('RouteGuard', 'Redirecting to parties - authenticated user in public route')
         router.replace('/parties')
       }
     }
@@ -46,7 +47,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
 
   // Não renderiza nada enquanto verifica a autenticação inicial
   if (loading) {
-    console.log('⌛ Carregando...')
+    logger.debug('RouteGuard', 'Loading initial auth state')
     return null
   }
 

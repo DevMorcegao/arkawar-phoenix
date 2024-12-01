@@ -5,7 +5,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Boss } from '@/app/types/boss'
 import { Input } from '@/components/ui/input'
 import { calculateSpawnTime } from '@/app/utils/timeCalculations'
-import { cn } from '@/lib/utils'
+import { logger } from '@/lib/logger'
 
 interface BossConfirmationProps {
   boss: Boss
@@ -81,7 +81,7 @@ const BossConfirmation: React.FC<BossConfirmationProps> = ({ boss, onConfirm, on
       createdAt: boss.createdAt
     }
 
-    console.log('BossConfirmation: Calling onConfirm with updatedBoss:', updatedBoss)
+    logger.debug('BossConfirmation', 'Confirming boss update', { updatedBoss })
     onConfirm(updatedBoss)
   }
 

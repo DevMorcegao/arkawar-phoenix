@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { BossData } from '../types/boss';
 import { ImageProcessor } from './imageProcessing';
+import { logger } from '@/lib/logger';
 
 export const findBossByText = async (text: string, image: any, bossData: BossData[]): Promise<BossData | null> => {
   // Primeiro tenta o método tradicional
@@ -49,7 +50,7 @@ export const findBossByText = async (text: string, image: any, bossData: BossDat
         return boss;
       }
     } catch (error) {
-      console.error('Error processing image with reference:', error);
+      logger.error('TextProcessing', 'Error processing image with reference', { error });
     }
   }
   

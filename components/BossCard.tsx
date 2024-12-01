@@ -10,7 +10,7 @@ import { toast } from 'react-hot-toast'
 import { ConfirmationDialog } from './ConfirmationDialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import BossConfirmation from './BossConfirmation'
-import { cn } from '@/lib/utils'
+import { logger } from '@/lib/logger'
 
 interface BossCardProps {
   boss: Boss
@@ -61,14 +61,14 @@ const BossCard: React.FC<BossCardProps> = ({ boss, onRemove, onUpdateStatus, onE
 
   const handleEditSubmit = async (updatedBoss: Boss) => {
     try {
-      console.log('BossCard: Starting edit process with boss:', updatedBoss)
+      logger.debug('BossCard', 'Starting edit process', { boss: updatedBoss })
       if (!onEdit) {
         throw new Error('Edit function not provided')
       }
       await onEdit(updatedBoss)
       setIsEditDialogOpen(false)
     } catch (error) {
-      console.error('BossCard: Error in edit process:', error)
+      logger.error('BossCard', 'Error in edit process', { error })
       toast.error('Erro ao atualizar o boss. Tente novamente.')
     }
   }

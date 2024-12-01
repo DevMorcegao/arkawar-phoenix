@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { logger } from '@/lib/logger';
 
 const environment = process.env.NEXT_PUBLIC_FIREBASE_ENV || 'development';
 
@@ -30,6 +31,6 @@ const getFirebaseConfig = () => {
 
 const firebaseConfig = getFirebaseConfig();
 const app = initializeApp(firebaseConfig);
-console.log(`Firebase inicializado com sucesso no ambiente: ${environment}`);
+logger.info('Firebase', 'Firebase initialized', { environment });
 export const auth = getAuth(app);
 export const db = getFirestore(app);

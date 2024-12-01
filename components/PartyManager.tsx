@@ -29,6 +29,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { toast, Toaster } from 'react-hot-toast'
+import { logger } from '@/lib/logger'
 
 interface Character {
   id: string
@@ -158,7 +159,7 @@ export default function PartyManager() {
         setAvailableChars(availableCharacters)
       }
     } catch (error) {
-      console.error("Error fetching parties:", error)
+      logger.error('PartyManager', 'Error fetching parties', { error })
       setError("Erro ao carregar as parties. Por favor, tente novamente.")
     }
   }

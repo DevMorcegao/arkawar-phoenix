@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 export const ThemeLoadingScreen = () => {
   return (
     <motion.div
+      data-testid="theme-loading-screen"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }} // Adiciona saída suave para evitar flash
