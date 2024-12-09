@@ -52,7 +52,7 @@ const BossCard: React.FC<BossCardProps> = ({ boss, onRemove, onUpdateStatus, onE
           break
       }
     } catch (error) {
-      console.error('Error handling action:', error)
+      logger.error('BossCard', 'Error handling action', { error })
       toast.error('Erro ao executar ação. Tente novamente.')
     } finally {
       setConfirmAction({ type: null, isOpen: false })

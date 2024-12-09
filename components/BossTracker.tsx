@@ -113,7 +113,7 @@ const BossTracker: React.FC = () => {
       channel: channel ? `Channel ${channel}` : 'Unknown',
       appearanceStatus: 'pending',
       capturedTime: `${timeInfo.hours}h ${timeInfo.minutes}m`,
-      spawnTime: spawnTime.toISOString(), // Convert to ISO string for Firestore
+      spawnTime: spawnTime.toISOString(), // Converte para string ISO para o Firestore
       status: 'pending'
     }
   }

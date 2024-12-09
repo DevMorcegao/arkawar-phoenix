@@ -246,7 +246,7 @@ export default function AdminPanel() {
       // Não precisamos atualizar o estado local pois o onSnapshot já vai cuidar disso
       toast.success(status === 'killed' ? 'Boss marcado como morto!' : 'Boss marcado como não aparecido!')
     } catch (error) {
-      console.error('Error updating boss status:', error)
+      logger.error('AdminPanel', 'Error updating boss status', { error })
       toast.error('Erro ao atualizar o status do boss.')
     }
   }
@@ -281,7 +281,7 @@ export default function AdminPanel() {
       // Não precisamos atualizar o estado local pois o onSnapshot já cuida disso
       toast.success('Boss removido com sucesso.')
     } catch (error) {
-      console.error('Error removing boss:', error)
+      logger.error('AdminPanel', 'Error removing boss', { error })
       toast.error('Erro ao remover o boss.')
     }
   }
@@ -298,7 +298,7 @@ export default function AdminPanel() {
       const snapshot = await getDocs(q)
       return !snapshot.empty
     } catch (error) {
-      console.error('Error checking duplicate boss:', error)
+      logger.error('AdminPanel', 'Error checking duplicate boss', { error })
       return false // Em caso de erro, permite adicionar
     }
   }
@@ -347,7 +347,7 @@ export default function AdminPanel() {
       await setDoc(bossRef, updateData, { merge: true })
       toast.success('Boss atualizado com sucesso!')
     } catch (error) {
-      console.error('Error editing boss:', error)
+      logger.error('AdminPanel', 'Error editing boss', { error })
       toast.error('Erro ao atualizar o boss. Tente novamente.')
     }
   }

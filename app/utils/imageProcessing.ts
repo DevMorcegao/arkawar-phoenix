@@ -1,4 +1,5 @@
 import { BossData } from '../types/boss';
+import { logger } from '@/lib/logger';
 
 interface OCRResult {
   text: string;
@@ -48,7 +49,7 @@ export class ImageProcessor {
         results.time = await this.processRegion(image, 'time');
       }
     } catch (error) {
-      console.error('Error processing image regions:', error);
+      logger.error('ImageProcessor', 'Error processing image regions', { error });
     }
 
     return results;
@@ -77,7 +78,7 @@ export class ImageProcessor {
         };
       }
     } catch (error) {
-      console.error(`Error processing ${regionType} region:`, error);
+      logger.error('ImageProcessor', `Error processing ${regionType} region`, { error });
     }
 
     return null;

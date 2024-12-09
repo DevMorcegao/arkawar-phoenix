@@ -8,6 +8,7 @@ import { Sun, Moon } from 'lucide-react'
 import AdminPanel from '@/components/AdminPanel'
 import PartyManager from '@/components/PartyManager'
 import { useRouter } from 'next/navigation'
+import { logger } from '@/lib/logger'
 
 interface ArkaWarManagerProps {
   initialSection?: 'admin' | 'parties'
@@ -40,7 +41,7 @@ export default function ArkaWarManager({ initialSection = 'parties' }: ArkaWarMa
       await logout()
       router.push('/login')
     } catch (error) {
-      console.error('Error logging out:', error)
+      logger.error('ArkaWarManager', 'Error logging out', { error })
     }
   }
 
