@@ -192,6 +192,7 @@ export default function AddBossButton({ onConfirm, onReject }: AddBossButtonProp
 
   if (pendingBosses.length > 0) {
     return (
+      // "space-y-8" Adiciona um espaço extra entre os botões de "Confirmar Todos" e "Cancelar Todos" em relação a linha de separação
       <div className="space-y-8">
         <div className="flex flex-wrap gap-4">
           {pendingBosses.map(boss => (
