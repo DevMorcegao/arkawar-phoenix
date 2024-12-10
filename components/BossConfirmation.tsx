@@ -6,41 +6,106 @@ import { Boss } from '@/app/types/boss'
 import { Input } from '@/components/ui/input'
 import { calculateSpawnTime } from '@/app/utils/timeCalculations'
 import { logger } from '@/lib/logger'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { bossData } from '@/app/data/bossData'
+import toast from 'react-hot-toast'
 
 interface BossConfirmationProps {
   boss: Boss
   onConfirm: (updatedBoss: Boss) => void
+  onConfirmAndAdd?: (updatedBoss: Boss) => void
   onReject: () => void
   isEdit?: boolean
+  isManualAdd?: boolean
+  onChannelChange?: (id: string, newChannel: string) => boolean
+  onBossNameChange?: (id: string, newName: string) => boolean
 }
 
-const BossConfirmation: React.FC<BossConfirmationProps> = ({ boss, onConfirm, onReject, isEdit = false }) => {
+const BossConfirmation: React.FC<BossConfirmationProps> = ({ boss, onConfirm, onConfirmAndAdd, onReject, isEdit = false, isManualAdd = false, onChannelChange, onBossNameChange }) => {
   const now = new Date()
   const [channel, setChannel] = useState(boss.channel?.replace('Channel ', '') || '')
   const [channelError, setChannelError] = useState<string | null>(null)
   const [appearanceTime, setAppearanceTime] = useState(boss.capturedTime || '')
   const [spawnTime, setSpawnTime] = useState<Date>(new Date(boss.spawnTime))
+  const [editedBoss, setEditedBoss] = useState<Boss>({
+    ...boss,
+    channel: boss.channel || '',
+    status: boss.status || 'pending',
+    appearanceStatus: boss.appearanceStatus || 'pending'
+  })
 
-  const validChannels = ['1', '2', '3', '4', '5', '10', '11', '12', '13']
+  useEffect(() => {
+    // Atualizar o estado quando o boss prop mudar
+    setEditedBoss({
+      ...boss,
+      channel: boss.channel || '',
+      status: boss.status || 'pending',
+      appearanceStatus: boss.appearanceStatus || 'pending'
+    })
+  }, [boss])
+
+  const validChannels = [1, 2, 3, 4, 5, 10, 11, 12, 13]
 
   // Função para validar o canal
-  const validateChannel = (value: string) => {
+  const validateChannel = (value: string): boolean => {
     if (!value) {
       setChannelError('Canal é obrigatório')
       return false
     }
-    if (!validChannels.includes(value)) {
+
+    const numericValue = parseInt(value, 10)
+
+    if (!validChannels.includes(numericValue)) {
       setChannelError('Canal inválido. Use: 1-5 ou 10-13')
       return false
     }
+
     setChannelError(null)
     return true
   }
 
-  const handleChannelChange = (value: string) => {
-    const numericValue = value.replace(/\D/g, '')
-    setChannel(numericValue)
-    validateChannel(numericValue)
+  // Atualizar o boss sempre que houver mudanças
+  const handleChange = (changes: Partial<Boss>) => {
+    const updatedBoss = {
+      ...editedBoss,
+      ...changes
+    }
+    setEditedBoss(updatedBoss)
+    if (isManualAdd) {
+      // No modo de adição manual, notificar as mudanças imediatamente
+      onConfirm(updatedBoss)
+    }
+  }
+
+  const handleChannelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Permitir apenas números
+    const newValue = e.target.value.replace(/\D/g, '')
+    setChannel(newValue)
+    setChannelError(null)
+
+    // Validar o canal
+    if (validateChannel(newValue)) {
+      const newChannel = `Channel ${newValue}`
+      
+      // Se o componente pai permitir a mudança de canal (não há duplicata)
+      if (!onChannelChange || onChannelChange(editedBoss.id, newChannel)) {
+        handleChange({ channel: newChannel })
+      } else {
+        // Se houver duplicata, limpar o canal
+        setChannel('')
+        handleChange({ channel: undefined })
+      }
+    } else {
+      // Se o canal for inválido, limpar o canal do boss
+      handleChange({ channel: undefined })
+    }
+  }
+
+  const handleSpawnTimeChange = (date: Date | undefined) => {
+    if (date) {
+      setSpawnTime(date)
+      handleChange({ spawnTime: date.toISOString() })
+    }
   }
 
   // Função para extrair horas e minutos do formato "Xh Ym"
@@ -60,29 +125,50 @@ const BossConfirmation: React.FC<BossConfirmationProps> = ({ boss, onConfirm, on
     const timeInfo = parseAppearanceTime(appearanceTime)
     if (timeInfo) {
       const newSpawnTime = calculateSpawnTime(timeInfo.hours, timeInfo.minutes)
-      setSpawnTime(newSpawnTime)
+      handleSpawnTimeChange(newSpawnTime)
     }
   }, [appearanceTime])
 
+  // Handler para mudança no nome do boss
+  const handleBossNameChange = (value: string) => {
+    const selectedBoss = bossData.find(b => b.name === value)
+    if (selectedBoss) {
+      // Se o componente pai permitir a mudança de nome (não há duplicata)
+      if (!onBossNameChange || onBossNameChange(editedBoss.id, selectedBoss.name)) {
+        handleChange({
+          name: selectedBoss.name,
+          spawnMap: selectedBoss.spawnMap
+        })
+      }
+    }
+  }
+
   const handleConfirm = () => {
-    if (!validateChannel(channel)) return
+    if (!validateChannel(channel)) {
+      toast.error('Canal inválido. Use: 1-5 ou 10-13')
+      return
+    }
     
     const updatedBoss: Boss = {
-      ...boss,
-      id: boss.id,
-      name: boss.name,
-      spawnMap: boss.spawnMap,
+      ...editedBoss,
+      id: editedBoss.id || `boss-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name: editedBoss.name,
+      spawnMap: editedBoss.spawnMap,
       channel: channel ? `Channel ${channel}` : undefined,
-      appearanceStatus: boss.status,
+      appearanceStatus: editedBoss.status,
       capturedTime: appearanceTime,
       spawnTime: spawnTime.toISOString(),
-      status: boss.status || 'pending',
-      userId: boss.userId,
-      createdAt: boss.createdAt
+      status: editedBoss.status || 'pending',
+      userId: editedBoss.userId,
+      createdAt: editedBoss.createdAt
     }
 
     logger.debug('BossConfirmation', 'Confirming boss update', { updatedBoss })
-    onConfirm(updatedBoss)
+    if (onConfirmAndAdd && isManualAdd) {
+      onConfirmAndAdd(updatedBoss)
+    } else {
+      onConfirm(updatedBoss)
+    }
   }
 
   const handleAppearanceTimeChange = (value: string) => {
@@ -95,6 +181,8 @@ const BossConfirmation: React.FC<BossConfirmationProps> = ({ boss, onConfirm, on
       if (match[1] && !match[2]) formatted = `${match[1]}h${match[3] || ' '}${match[4] || '0'}m`
       if (match[4] && !match[5]) formatted = `${match[1] || '0'}h ${match[4]}m`
       setAppearanceTime(formatted)
+      // Atualizar o estado do boss com o novo tempo capturado
+      handleChange({ capturedTime: formatted })
     }
   }
 
@@ -107,13 +195,35 @@ const BossConfirmation: React.FC<BossConfirmationProps> = ({ boss, onConfirm, on
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
-          <p className="flex justify-between items-center">
-            <strong className="text-orange-700 dark:text-orange-300">Nome:</strong>
-            <span className="text-gray-800 dark:text-gray-200">{boss.name}</span>
-          </p>
+          <div className="space-y-2">
+            <strong className="text-orange-700 dark:text-orange-300">Nome do Boss</strong>
+            {isManualAdd || isEdit ? (
+              <Select
+                value={editedBoss.name}
+                onValueChange={handleBossNameChange}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o boss" />
+                </SelectTrigger>
+                <SelectContent>
+                  {bossData.map((boss) => (
+                    <SelectItem key={boss.name} value={boss.name}>
+                      {boss.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                value={editedBoss.name}
+                onChange={(e) => handleChange({ name: e.target.value })}
+                readOnly={!isEdit}
+              />
+            )}
+          </div>
           <p className="flex justify-between items-center">
             <strong className="text-orange-700 dark:text-orange-300">Mapa:</strong>
-            <span className="text-gray-800 dark:text-gray-200">{boss.spawnMap}</span>
+            <span className="text-gray-800 dark:text-gray-200">{editedBoss.spawnMap}</span>
           </p>
           <div className="flex flex-col space-y-1">
             <div className="flex justify-between items-center">
@@ -121,7 +231,7 @@ const BossConfirmation: React.FC<BossConfirmationProps> = ({ boss, onConfirm, on
               <div className="flex flex-col items-end">
                 <Input
                   value={channel}
-                  onChange={(e) => handleChannelChange(e.target.value)}
+                  onChange={handleChannelChange}
                   className="w-24 text-right"
                   placeholder="Ex: 1"
                 />

@@ -67,7 +67,7 @@ export default function ArkaWarManager({ initialSection = 'parties' }: ArkaWarMa
               <Button
                 onClick={toggleSection}
                 variant="outline"
-                className="text-base px-5 py-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white border-none"
+                className="text-base px-5 py-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white border-none hover:text-white"
               >
                 {showAdminPanel ? "Gerenciar Parties" : "Painel Admin"}
               </Button>
@@ -76,7 +76,7 @@ export default function ArkaWarManager({ initialSection = 'parties' }: ArkaWarMa
               variant="ghost"
               size="icon"
               onClick={toggleTheme}
-              className="h-9 w-9 bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/30 dark:to-red-900/30 hover:from-orange-100 hover:to-red-100 dark:hover:from-orange-800/30 dark:hover:to-red-800/30"
+              className="h-9 w-9 bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/30 dark:to-red-900/30 hover:from-orange-200 hover:to-red-200 dark:hover:from-orange-800/30 dark:hover:to-red-800/30"
             >
               {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
             </Button>
@@ -99,7 +99,7 @@ export default function ArkaWarManager({ initialSection = 'parties' }: ArkaWarMa
 
       <footer className="bg-gradient-to-r from-orange-100 to-red-100 dark:from-orange-900/50 dark:to-red-900/50 shadow-lg">
         <div className="max-w-8xl mx-auto px-5 sm:px-6 lg:px-10 py-4 text-center text-orange-800 dark:text-orange-200">
-          Arka War Guild Phoenix &copy; 2024
+          Guild Phoenix &copy; Since 2023
         </div>
       </footer>
     </div>

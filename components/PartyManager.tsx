@@ -76,7 +76,7 @@ export default function PartyManager() {
   const [newCharName, setNewCharName] = useState("")
   const [newCharClass, setNewCharClass] = useState("")
   const [logs, setLogs] = useState<LogEntry[]>([])
-  const [partiesRegistered, setPartiesRegistered] = useState(false)
+  const [isEditMode, setIsEditMode] = useState(false) // Inicializa como false para mostrar "Editar Parties" primeiro
   const [importText, setImportText] = useState("")
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
   const { user, isAdmin } = useAuth()
@@ -136,7 +136,7 @@ export default function PartyManager() {
         const data = doc.data() as PartyDocument
         if (data.members && data.members.length > 0) {
           fetchedParties.push({
-            id: doc.id,
+            id: `party-${fetchedParties.length + 1}`, // Gera um novo ID sequencial
             members: data.members,
             active: data.active,
             createdAt: data.createdAt,
@@ -152,7 +152,7 @@ export default function PartyManager() {
 
       if (fetchedParties.length > 0) {
         setParties(fetchedParties)
-        setPartiesRegistered(true)
+        setIsEditMode(false)
       }
       
       if (availableCharacters.length > 0) {
@@ -194,6 +194,10 @@ export default function PartyManager() {
   const validateParty = (party: Party) => {
     const hasEE = party.members.some(member => member.class === "EE")
     const hasSM = party.members.some(member => member.class === "SM")
+    
+    if (party.members.length > 5) {
+      return "Party não pode ter mais de 5 membros"
+    }
     
     if (!hasEE && !hasSM) {
       return "Faltam EE e SM nesta party"
@@ -243,16 +247,16 @@ export default function PartyManager() {
     if (source.droppableId === "available") {
       setAvailableChars(newSourceMembers)
     } else {
-      setParties(prev => prev.map(p => 
-        p.id === source.droppableId ? { ...p, members: newSourceMembers } : p
+      setParties(prev => prev.map(party => 
+        party.id === source.droppableId ? { ...party, members: newSourceMembers } : party
       ))
     }
   
     if (destination.droppableId === "available") {
       setAvailableChars(uniqueDestMembers)
     } else {
-      setParties(prev => prev.map(p =>
-        p.id === destination.droppableId ? { ...p, members: uniqueDestMembers } : p
+      setParties(prev => prev.map(party =>
+        party.id === destination.droppableId ? { ...party, members: uniqueDestMembers } : party
       ))
     }
   
@@ -261,8 +265,8 @@ export default function PartyManager() {
       if (source.droppableId === "available") {
         setAvailableChars(prev => prev.filter(char => char.id !== movedMember.id))
       } else {
-        setParties(prev => prev.map(p =>
-          p.id === source.droppableId ? { ...p, members: p.members.filter(char => char.id !== movedMember.id) } : p
+        setParties(prev => prev.map(party =>
+          party.id === source.droppableId ? { ...party, members: party.members.filter(char => char.id !== movedMember.id) } : party
         ))
       }
     }
@@ -399,13 +403,14 @@ export default function PartyManager() {
 
   const addNewParty = () => {
     if (parties.length < 6) {
+      const partyNumber = parties.length + 1
       const newParty: Party = {
-        id: `party-${parties.length + 1}`,
+        id: `party-${partyNumber}`,
         members: []
       }
       setParties(prev => [...prev, newParty])
       addLogEntry(`Added new party: ${newParty.id}`)
-      toast.success(`Nova party ${newParty.id} adicionada!`, { duration: 5000, })
+      toast.success(`Nova party ${partyNumber} adicionada!`, { duration: 5000, })
     } else {
       toast.error("Máximo de 6 parties atingido", { duration: 5000, })
     }
@@ -435,7 +440,6 @@ export default function PartyManager() {
     parties.forEach(party => {
       const partyRef = doc(collection(db, "parties"))
       batch.set(partyRef, {
-        id: party.id,
         members: party.members,
         active: true,
         createdAt: serverTimestamp(),
@@ -445,12 +449,12 @@ export default function PartyManager() {
     })
     
     await batch.commit()
-    setPartiesRegistered(true)
+    setIsEditMode(false)
     addLogEntry("Parties registered")
   }
 
   const editParties = () => {
-    setPartiesRegistered(false)
+    setIsEditMode(true)
     addLogEntry("Parties editing mode activated")
   }
 
@@ -520,71 +524,74 @@ export default function PartyManager() {
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="grid grid-cols-1 gap-4 bg-card rounded-lg p-6">
           <h1 className="text-3xl font-bold text-primary text-center">PT&apos;S ARKA WAR GUILD PHOENIX</h1>
-          {isAdmin && !partiesRegistered && (
-            <div className="flex flex-wrap justify-center gap-2">
-              <Button 
-                onClick={autoOrganizeParties}
-                className="flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600"
-              >
-                Auto-Organizar Parties
-              </Button>
-              <Button 
-                onClick={addNewParty}
-                className="flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600"
-              >
-                Adicionar Nova Party
-              </Button>
-              <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button
+          {isAdmin && (
+            <>
+              {isEditMode ? (
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Button 
+                    onClick={autoOrganizeParties}
                     className="flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600"
                   >
-                    Importar Personagens
+                    Auto-Organizar Parties
                   </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[425px]">
-                  <DialogHeader>
-                    <DialogTitle>Importar Personagens</DialogTitle>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <Textarea
-                      placeholder={`Importe a lista de personagens aqui, seguindo o exemplo:
+                  <Button 
+                    onClick={addNewParty}
+                    className="flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600"
+                  >
+                    Adicionar Nova Party
+                  </Button>
+                  <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button
+                        className="flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600"
+                      >
+                        Importar Personagens
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[425px]">
+                      <DialogHeader>
+                        <DialogTitle>Importar Personagens</DialogTitle>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <Textarea
+                          placeholder={`Importe a lista de personagens aqui, seguindo o exemplo:
 
-  CLASSE - NOME DO PERSONAGEM
-  
-  Ex:
-  
-  MAIN - Morcegao
-  SM - Pelesz
-  EE - TonEE
-  DL - DamiDL
-  BK - Safada1
-  KD - Tomberry`}
-                      value={importText}
-                      onChange={(e) => setImportText(e.target.value)}
-                      className="h-[200px]"
-                    />
-                    <Button onClick={importCharacters}>Importar</Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-              <Button 
-                onClick={registerParties}
-                className="flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600"
-              >
-                Registrar Parties
-              </Button>
-            </div>
-          )}
-          {isAdmin && partiesRegistered && (
-            <div className="flex justify-center">
-              <Button 
-                onClick={editParties}
-                className="flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600"
-              >
-                Editar Parties
-              </Button>
-            </div>
+CLASSE - NOME DO PERSONAGEM
+
+Ex:
+
+MAIN - Morcegao
+SM - Pelesz
+EE - TonEE
+DL - DamiDL
+BK - Safada1
+KD - Tomberry`}
+                          value={importText}
+                          onChange={(e) => setImportText(e.target.value)}
+                          className="h-[200px]"
+                        />
+                        <Button onClick={importCharacters}>Importar</Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                  <Button 
+                    onClick={registerParties}
+                    className="flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600"
+                  >
+                    Registrar Parties
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex justify-center">
+                  <Button 
+                    onClick={editParties}
+                    className="flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600"
+                  >
+                    Editar Parties
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -593,10 +600,10 @@ export default function PartyManager() {
         <DragDropContext onDragEnd={onDragEnd}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {parties.map((party) => (
-              <Card key={party.id} className="bg-card">
+              <Card key={party.id} className="bg-card min-w-[300px]">
                 <CardHeader className="space-y-1">
                   <CardTitle className="flex justify-between items-center">
-                    <span>Party {party.id.split("-")[1]}</span>
+                    <span>Party {party.id.replace("party-", "")}</span>
                     {validateParty(party) && (
                       <TooltipProvider>
                         <Tooltip>
@@ -609,20 +616,19 @@ export default function PartyManager() {
                         </Tooltip>
                       </TooltipProvider>
                     )}
-                    {isAdmin && !partiesRegistered && (
+                    {isAdmin && isEditMode && (
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => deleteParty(party.id)}
-                        className="ml-2"
                       >
-                        <X className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     )}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <Droppable droppableId={party.id} isDropDisabled={partiesRegistered && !isAdmin}>
+                  <Droppable droppableId={party.id} isDropDisabled={!isEditMode}>
                     {(provided) => (
                       <div
                         ref={provided.innerRef}
@@ -634,25 +640,26 @@ export default function PartyManager() {
                             key={member.id}
                             draggableId={member.id}
                             index={index}
-                            isDragDisabled={partiesRegistered && !isAdmin}
+                            isDragDisabled={!isEditMode}
                           >
                             {(provided) => (
                               <div
                                 ref={provided.innerRef}
                                 {...provided.draggableProps}
                                 {...provided.dragHandleProps}
-                                className={`p-2 rounded-md flex justify-between items-center ${
+                                className={`p-2 rounded-md flex justify-between items-center w-full ${
                                   member.isMain ? 'bg-yellow-200 dark:bg-yellow-800' : 'bg-muted'
                                 }`}
                               >
-                                <span className="flex items-center">
-                                  {member.class} - {member.name}
-                                  {member.isMain && <Crown className="h-4 w-4 ml-2 text-yellow-500" />}
+                                <span className="flex items-center truncate mr-2 min-w-0 flex-1">
+                                  <span className="truncate">{member.class} - {member.name}</span>
+                                  {member.isMain && <Crown className="h-4 w-4 ml-2 flex-shrink-0 text-yellow-500" />}
                                 </span>
-                                {isAdmin && !partiesRegistered && (
+                                {isAdmin && isEditMode && (
                                   <Button
                                     variant="ghost"
                                     size="icon"
+                                    className="flex-shrink-0"
                                     onClick={() => removeCharacter(member.id, party.id)}
                                   >
                                     <Trash2 className="h-4 w-4" />
@@ -670,41 +677,45 @@ export default function PartyManager() {
               </Card>
             ))}
           </div>
-          
-          {isAdmin && (
-            <Card className="mt-6">
+
+          {availableChars.length > 0 && (
+            <Card className="mt-4">
               <CardHeader>
                 <CardTitle>Personagens Disponíveis</CardTitle>
               </CardHeader>
               <CardContent>
-                <Droppable droppableId="available" isDropDisabled={partiesRegistered && !isAdmin}>
+                <Droppable droppableId="available" isDropDisabled={!isEditMode}>
                   {(provided) => (
                     <div
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2"
+                      className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2"
                     >
                       {availableChars.map((char, index) => (
                         <Draggable
                           key={char.id}
                           draggableId={char.id}
                           index={index}
-                          isDragDisabled={partiesRegistered && !isAdmin}
+                          isDragDisabled={!isEditMode}
                         >
-                          {(provided) => (
+                          {(provided, snapshot) => (
                             <div
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
-                              className={`p-2 rounded-md text-sm flex justify-between items-center ${
+                              style={{
+                                ...provided.draggableProps.style,
+                                width: snapshot.isDragging ? '300px' : 'auto'
+                              }}
+                              className={`p-2 rounded-md flex justify-between items-center w-full ${
                                 char.isMain ? 'bg-yellow-200 dark:bg-yellow-800' : 'bg-muted'
                               }`}
                             >
-                              <span className="flex items-center">
-                                {char.class} - {char.name}
-                                {char.isMain && <Crown className="h-4 w-4 ml-2 text-yellow-500" />}
+                              <span className="flex items-center truncate mr-2 min-w-0 flex-1">
+                                <span className="truncate">{char.class} - {char.name}</span>
+                                {char.isMain && <Crown className="h-4 w-4 ml-2 flex-shrink-0 text-yellow-500" />}
                               </span>
-                              {isAdmin && !partiesRegistered && (
+                              {isAdmin && isEditMode && (
                                 <div className="flex space-x-1">
                                   {char.class === 'DL' && (
                                     <Button
@@ -736,9 +747,8 @@ export default function PartyManager() {
             </Card>
           )}
         </DragDropContext>
-       
 
-        {isAdmin && !partiesRegistered && (
+        {isAdmin && isEditMode && (
           <Card className="mt-6">
             <CardHeader>
               <CardTitle>Adicionar Novo Personagem</CardTitle>

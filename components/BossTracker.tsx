@@ -1,7 +1,7 @@
 "use client"
 
-import React, { useState, useEffect, useCallback } from 'react'
-import { collection, setDoc, doc, onSnapshot, updateDoc, query, where, getDoc, serverTimestamp, getDocs, orderBy, limit } from 'firebase/firestore'
+import React, { useState, useEffect } from 'react'
+import { collection, setDoc, doc, onSnapshot, updateDoc, query, where, getDoc, serverTimestamp, getDocs  } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -14,6 +14,7 @@ import { bossRespawnData } from '@/app/data/bossRespawnData'
 import ImageDropzone from './ImageDropzone'
 import BossCard from './BossCard'
 import BossConfirmation from './BossConfirmation'
+import AddBossButton from './AddBossButton'
 import { addHours, addMinutes, subMinutes } from 'date-fns'
 import { differenceInHours, differenceInMinutes } from 'date-fns'
 import { initializeOCRWorker, processImage } from '@/app/utils/ocrProcessor'
@@ -479,10 +480,28 @@ const BossTracker: React.FC = () => {
               <h3 className="text-lg font-semibold mb-2">Adicionar um Novo Boss</h3>
               <p className="text-sm text-muted-foreground mb-4">Arraste uma screenshot ou cole uma imagem (Ctrl+V)</p>
               
-              <ImageDropzone
-                onDrop={onDrop}
-                isProcessing={isProcessing}
-              />
+              <div className="space-y-6">
+                <ImageDropzone
+                  onDrop={onDrop}
+                  isProcessing={isProcessing}
+                />
+
+                <div className="relative py-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-4 text-muted-foreground font-medium">
+                      ou adicione manualmente
+                    </span>
+                  </div>
+                </div>
+
+                <AddBossButton
+                  onConfirm={confirmBoss}
+                  onReject={rejectBoss}
+                />
+              </div>
             </div>
 
             {pendingBoss && (
@@ -501,7 +520,7 @@ const BossTracker: React.FC = () => {
 
             {bosses.length > 0 && (
               <div>
-                <div className="flex justify-between items-center mb-4">
+                <div className="flex justify-between items-center mb-4 mt-8">
                   <div>
                     <h3 className="text-lg font-semibold">Bosses Detectados</h3>
                     <p className="text-sm text-muted-foreground">{bosses.length} {bosses.length === 1 ? 'boss encontrado' : 'bosses encontrados'}</p>
