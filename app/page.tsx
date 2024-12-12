@@ -2,7 +2,6 @@
 
 import { useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-// import TestFirestore from "@/components/TestFirestore"
 
 export default function Home() {
   const { user } = useAuth()
@@ -15,5 +14,5 @@ export default function Home() {
     }
   }, [user])
 
-  return null // Redirect page
+  return null
 }

@@ -92,8 +92,14 @@ export default function ArkaWarManager({ initialSection = 'parties' }: ArkaWarMa
       </header>
 
       <main className="flex-grow max-w-8xl mx-auto px-5 sm:px-6 lg:px-10 py-8">
-        <div className="rounded-lg">
-          {showAdminPanel && isAdmin ? <AdminPanel /> : <PartyManager />}
+      <div className="rounded-lg">
+          {showAdminPanel && isAdmin ? (
+            <>
+              <AdminPanel />
+            </>
+          ) : (
+            <PartyManager />
+          )}
         </div>
       </main>
 
