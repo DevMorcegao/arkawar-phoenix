@@ -50,8 +50,8 @@ async function checkBosses() {
 
       const intervals = [30, 20, 10, 5];
       for (const minutes of intervals) {
-        if (timeUntilSpawn <= minutes && timeUntilSpawn > minutes - 1) {
-          console.log(`Enviando notificação de ${minutes} minutos`);
+        if (timeUntilSpawn >= minutes - 1 && timeUntilSpawn <= minutes) {
+          console.log(`Enviando notificação de ${minutes} minutos para ${boss.name} (Canal ${boss.channel})`);
           
           const notificationId = `${boss.id}_${minutes}`;
           const notificationDoc = await notificationsRef.doc(notificationId).get();
@@ -102,6 +102,7 @@ async function checkBosses() {
     }
   } catch (error) {
     console.error('❌ Erro ao processar notificações:', error);
+    console.error('Detalhes do erro:', error instanceof Error ? error.message : error);
   }
 }
 
