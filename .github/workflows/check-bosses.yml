@@ -2,7 +2,7 @@ name: Check Boss Spawns
 
 on:
   schedule:
-    - cron: '0,5,10,15,20,25,30,35,40,45,50,55 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -12,6 +12,12 @@ jobs:
       contents: read
     timeout-minutes: 5
     steps:
+      - name: Log Time
+        run: |
+          echo "=== Check Bosses Iniciado ==="
+          echo "Data/Hora: $(date)"
+          echo "=========================="
+
       - uses: actions/checkout@v2
 
       - name: Setup Node.js
