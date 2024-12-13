@@ -2,12 +2,15 @@ name: Check Boss Spawns
 
 on:
   schedule:
-    - cron: '*/1 * * * *' # Roda a cada 1 minuto
-  workflow_dispatch: # Permite executar manualmente
+    - cron: '0,5,10,15,20,25,30,35,40,45,50,55 * * * *'
+  workflow_dispatch:
 
 jobs:
   check-bosses:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v2
 
