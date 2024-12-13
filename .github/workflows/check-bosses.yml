@@ -24,7 +24,7 @@ jobs:
       - name: Install Dependencies
         run: |
           cd scripts
-          pnpm install firebase-admin axios
+          pnpm install
 
       - name: Check Bosses
         env:
@@ -34,4 +34,4 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           cd scripts
-          node check-bosses.js
+          pnpm start
