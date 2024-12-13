@@ -20,16 +20,11 @@ initializeApp({
 
 const db = getFirestore();
 
-// Função para ajustar para GMT-3
-function adjustToGMT3(date: Date): Date {
-  return new Date(date.getTime() - 3 * 60 * 60 * 1000);
-}
-
 async function checkBosses() {
   console.log('🔍 Iniciando verificação de bosses...');
   
-  const now = adjustToGMT3(new Date());
-  console.log(`⏰ Hora atual (GMT-3): ${now.toISOString()}`);
+  const now = new Date();
+  console.log(`⏰ Hora atual: ${now.toISOString()}`);
   
   try {
     const bossesSnapshot = await db.collection('bossSpawns')
@@ -42,22 +37,22 @@ async function checkBosses() {
 
     for (const doc of bossesSnapshot.docs) {
       const boss = doc.data();
-      console.log('Boss data:', boss); // Debug
+      console.log('Boss data:', boss);
 
-      // Converter string ou timestamp para Date
-      const spawnTime = boss.spawnTime instanceof Date 
-        ? boss.spawnTime 
-        : new Date(boss.spawnTime);
-      
-      const adjustedSpawnTime = adjustToGMT3(spawnTime);
+      const spawnTime = new Date(boss.spawnTime);
+      console.log(`Spawn time: ${spawnTime.toISOString()}`);
       
       const timeUntilSpawn = Math.floor(
-        (adjustedSpawnTime.getTime() - now.getTime()) / (1000 * 60)
+        (spawnTime.getTime() - now.getTime()) / (1000 * 60)
       );
+      
+      console.log(`Minutos até o spawn: ${timeUntilSpawn}`);
 
       const intervals = [30, 20, 10, 5];
       for (const minutes of intervals) {
         if (timeUntilSpawn <= minutes && timeUntilSpawn > minutes - 1) {
+          console.log(`Enviando notificação de ${minutes} minutos`);
+          
           const notificationId = `${boss.id}_${minutes}`;
           const notificationDoc = await notificationsRef.doc(notificationId).get();
 
@@ -84,7 +79,7 @@ async function checkBosses() {
                   },
                   {
                     name: "⏰ Horário de Spawn",
-                    value: adjustedSpawnTime.toLocaleTimeString('pt-BR', {
+                    value: spawnTime.toLocaleTimeString('pt-BR', {
                       hour: '2-digit',
                       minute: '2-digit',
                       timeZone: 'America/Sao_Paulo'
