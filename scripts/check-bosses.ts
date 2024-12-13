@@ -20,11 +20,16 @@ initializeApp({
 
 const db = getFirestore();
 
+// Função para ajustar para GMT-3
+function adjustToGMT3(date: Date): Date {
+  return new Date(date.getTime() - 3 * 60 * 60 * 1000); // -3 horas
+}
+
 async function checkBosses() {
   console.log('🔍 Iniciando verificação de bosses...');
   
-  const now = new Date();
-  console.log(`⏰ Hora atual: ${now.toISOString()}`);
+  const now = adjustToGMT3(new Date());
+  console.log(`⏰ Hora atual (GMT-3): ${now.toISOString()}`);
   
   try {
     const bossesSnapshot = await db.collection('bossSpawns')
@@ -37,7 +42,7 @@ async function checkBosses() {
 
     for (const doc of bossesSnapshot.docs) {
       const boss = doc.data();
-      const spawnTime = new Date(boss.spawnTime);
+      const spawnTime = adjustToGMT3(boss.spawnTime.toDate());
       
       const spawnTimeBR = new Date(spawnTime);
       spawnTimeBR.setHours(spawnTimeBR.getHours() - 3);
