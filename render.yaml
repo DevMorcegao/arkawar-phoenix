@@ -1,0 +1,16 @@
+services:
+  - type: cron
+    name: check-bosses
+    runtime: node
+    schedule: '* * * * *' # Roda a cada minuto
+    buildCommand: cd scripts && pnpm install
+    startCommand: cd scripts && pnpm start
+    envVars:
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: DISCORD_WEBHOOK_URL
+        sync: false
