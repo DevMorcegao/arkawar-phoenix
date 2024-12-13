@@ -22,7 +22,7 @@ const db = getFirestore();
 
 // Função para ajustar para GMT-3
 function adjustToGMT3(date: Date): Date {
-  return new Date(date.getTime() - 3 * 60 * 60 * 1000); // -3 horas
+  return new Date(date.getTime() - 3 * 60 * 60 * 1000);
 }
 
 async function checkBosses() {
@@ -42,13 +42,17 @@ async function checkBosses() {
 
     for (const doc of bossesSnapshot.docs) {
       const boss = doc.data();
-      const spawnTime = adjustToGMT3(boss.spawnTime.toDate());
+      console.log('Boss data:', boss); // Debug
+
+      // Converter string ou timestamp para Date
+      const spawnTime = boss.spawnTime instanceof Date 
+        ? boss.spawnTime 
+        : new Date(boss.spawnTime);
       
-      const spawnTimeBR = new Date(spawnTime);
-      spawnTimeBR.setHours(spawnTimeBR.getHours() - 3);
+      const adjustedSpawnTime = adjustToGMT3(spawnTime);
       
       const timeUntilSpawn = Math.floor(
-        (spawnTime.getTime() - now.getTime()) / (1000 * 60)
+        (adjustedSpawnTime.getTime() - now.getTime()) / (1000 * 60)
       );
 
       const intervals = [30, 20, 10, 5];
@@ -80,7 +84,7 @@ async function checkBosses() {
                   },
                   {
                     name: "⏰ Horário de Spawn",
-                    value: spawnTimeBR.toLocaleTimeString('pt-BR', {
+                    value: adjustedSpawnTime.toLocaleTimeString('pt-BR', {
                       hour: '2-digit',
                       minute: '2-digit',
                       timeZone: 'America/Sao_Paulo'
