@@ -21,12 +21,17 @@ initializeApp({
 const db = getFirestore();
 
 async function checkBosses() {
+  console.log('🔍 Iniciando verificação de bosses...');
+  
   const now = new Date();
+  console.log(`⏰ Hora atual: ${now.toISOString()}`);
   
   try {
     const bossesSnapshot = await db.collection('bossSpawns')
       .where('status', '==', 'pending')
       .get();
+
+    console.log(`📋 Bosses encontrados: ${bossesSnapshot.size}`);
 
     const notificationsRef = db.collection('bossNotifications');
 
@@ -92,7 +97,7 @@ async function checkBosses() {
       }
     }
   } catch (error) {
-    console.error('Erro ao processar notificações:', error);
+    console.error('❌ Erro ao processar notificações:', error);
   }
 }
 
