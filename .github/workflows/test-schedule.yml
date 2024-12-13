@@ -1,0 +1,17 @@
+name: Test Schedule
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test Schedule
+        run: |
+          echo "=== Teste de Agendamento ==="
+          echo "Data/Hora: $(date)"
+          echo "Timezone: $(date +%Z)"
+          echo "=========================="
