@@ -27,6 +27,17 @@ async function checkBosses() {
   console.log(`⏰ Hora atual: ${now.toISOString()}`);
   
   try {
+    // Limpar notificações antigas (mais de 1 hora)
+    const oldNotifications = await db.collection('bossNotifications')
+      .where('sentAt', '<', new Date(now.getTime() - 60 * 60 * 1000))
+      .get();
+    
+    console.log(`🧹 Limpando ${oldNotifications.size} notificações antigas`);
+    
+    for (const doc of oldNotifications.docs) {
+      await doc.ref.delete();
+    }
+
     const bossesSnapshot = await db.collection('bossSpawns')
       .where('status', '==', 'pending')
       .get();
@@ -51,14 +62,18 @@ async function checkBosses() {
       const intervals = [30, 20, 10, 5];
       for (const minutes of intervals) {
         if (timeUntilSpawn >= minutes - 1 && timeUntilSpawn <= minutes) {
-          console.log(`Tentando enviar notificação de ${minutes} minutos para ${boss.name} (Canal ${boss.channel})`);
-          
           const notificationId = `${boss.id}_${minutes}`;
           const notificationDoc = await notificationsRef.doc(notificationId).get();
-          console.log(`Notificação ${notificationId} existe? ${notificationDoc.exists}`);
+          
+          // Verifica se a notificação existe e se foi enviada há mais de 1 hora
+          const shouldNotify = !notificationDoc.exists || 
+            (notificationDoc.exists && 
+             notificationDoc.data()?.sentAt.toDate().getTime() < now.getTime() - 60 * 60 * 1000);
 
-          if (!notificationDoc.exists) {
-            console.log('Enviando notificação para o Discord...');
+          if (shouldNotify) {
+            console.log(`Enviando nova notificação de ${minutes} minutos...`);
+            console.log(`Tentando enviar notificação de ${minutes} minutos para ${boss.name} (Canal ${boss.channel})`);
+            
             try {
               const response = await axios.post(process.env.DISCORD_WEBHOOK_URL!, {
                 content: `@everyone\n🚨 **ALERTA DE BOSS** 🚨\nO boss **${boss.name}** vai nascer em ${minutes} minutos!`,
@@ -107,6 +122,8 @@ async function checkBosses() {
                 console.error('Detalhes do erro:', error.response?.data);
               }
             }
+          } else {
+            console.log(`Notificação de ${minutes} minutos já enviada recentemente`);
           }
         }
       }
