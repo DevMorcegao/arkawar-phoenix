@@ -35,7 +35,6 @@ import { useAuth } from "@/contexts/AuthContext"
 import { cn } from "@/lib/utils"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { logger } from '@/lib/logger'
-import { useDiscordNotifications } from "@/hooks/useDiscordNotifications"
 
 interface FirebaseUser extends UserInfo {
   role?: string
@@ -53,12 +52,6 @@ export default function AdminPanel() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // URL do webhook do Discord
-  const webhookUrl = process.env.NEXT_PUBLIC_DISCORD_WEBHOOK_URL!;
-
-  // Hook de notificações
-  useDiscordNotifications(allBosses, webhookUrl);
-  
   // Pega todas as seções ativas da URL
   const activeSections = searchParams.getAll('section')
 

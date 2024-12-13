@@ -1,0 +1,37 @@
+name: Check Boss Spawns
+
+on:
+  schedule:
+    - cron: '*/1 * * * *' # Roda a cada minuto
+  workflow_dispatch: # Permite executar manualmente
+
+jobs:
+  check-bosses:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '18'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install Dependencies
+        run: |
+          cd scripts
+          pnpm install firebase-admin axios
+
+      - name: Check Bosses
+        env:
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          cd scripts
+          node check-bosses.js

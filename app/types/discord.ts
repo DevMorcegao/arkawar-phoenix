@@ -12,7 +12,7 @@ export interface DiscordWebhookPayload {
 }
 
 export interface BossNotification {
-  bossName: string;
-  spawnTime: Date;
-  notified: boolean;
+  bossId: string;
+  minutes: number;
+  sentAt: Date;
 } 
