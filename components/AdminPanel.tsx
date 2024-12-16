@@ -23,7 +23,8 @@ import {
   Swords,
   Timer,
   ListChecks,
-  Trash2
+  Trash2,
+  BarChart3
 } from 'lucide-react'
 import BossTracker from "./BossTracker"
 import BossCard from "./BossCard"
@@ -35,6 +36,8 @@ import { useAuth } from "@/contexts/AuthContext"
 import { cn } from "@/lib/utils"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { logger } from '@/lib/logger'
+import { logBossAction } from '@/lib/logActions'
+import Analytics from './Analytics'
 
 interface FirebaseUser extends UserInfo {
   role?: string
@@ -244,6 +247,18 @@ export default function AdminPanel() {
         lastUpdated: serverTimestamp()
       })
 
+      // Adiciona o log da ação
+      await logBossAction(
+        user.uid,
+        user.displayName || user.email || 'Unknown User',
+        status === 'killed' ? 'killed' : 'noshow',
+        {
+          id: id,
+          name: bossData.name,
+          channel: bossData.channel
+        }
+      )
+
       // Não precisamos atualizar o estado local pois o onSnapshot já vai cuidar disso
       toast.success(status === 'killed' ? 'Boss marcado como morto!' : 'Boss marcado como não aparecido!')
     } catch (error) {
@@ -278,6 +293,18 @@ export default function AdminPanel() {
         status: 'deleted',
         lastUpdated: serverTimestamp()
       })
+
+      // Adiciona o log da ação
+      await logBossAction(
+        user.uid,
+        user.displayName || user.email || 'Unknown User',
+        'deleted',
+        {
+          id: id,
+          name: bossData.name,
+          channel: bossData.channel
+        }
+      )
 
       // Não precisamos atualizar o estado local pois o onSnapshot já cuida disso
       toast.success('Boss removido com sucesso.')
@@ -346,6 +373,59 @@ export default function AdminPanel() {
       }
 
       await setDoc(bossRef, updateData, { merge: true })
+
+      // Adiciona o log da ação
+      const getChangedFields = (oldBoss: Boss, newBoss: Boss) => {
+        const changes: {
+          field: string;
+          oldValue: string;
+          newValue: string;
+        }[] = [];
+
+        if (oldBoss.name !== newBoss.name) {
+          changes.push({
+            field: 'name',
+            oldValue: oldBoss.name,
+            newValue: newBoss.name
+          });
+        }
+
+        if (oldBoss.channel !== newBoss.channel) {
+          changes.push({
+            field: 'channel',
+            oldValue: oldBoss.channel || '',
+            newValue: newBoss.channel || ''
+          });
+        }
+
+        if (oldBoss.capturedTime !== newBoss.capturedTime) {
+          changes.push({
+            field: 'capturedTime',
+            oldValue: oldBoss.capturedTime || '',
+            newValue: newBoss.capturedTime || ''
+          });
+        }
+
+        return changes;
+      };
+
+      const changes = getChangedFields(bossData, updatedBoss);
+
+      // Adiciona o log da ação com todas as mudanças
+      await logBossAction(
+        user.uid,
+        user.displayName || user.email || 'Unknown User',
+        'edited',
+        {
+          id: updatedBoss.id,
+          name: updatedBoss.name,
+          channel: updatedBoss.channel
+        },
+        {
+          changes // Passamos o array completo de mudanças
+        }
+      )
+
       toast.success('Boss atualizado com sucesso!')
     } catch (error) {
       logger.error('AdminPanel', 'Error editing boss', { error })
@@ -428,6 +508,20 @@ export default function AdminPanel() {
             <ChevronDown className={cn(
               "ml-2 h-4 w-4 transition-transform",
               activeSections.includes('boss-status') && "rotate-180"
+            )} />
+          </Button>
+          <Button
+            onClick={() => toggleSection('analytics')}
+            className={cn(
+              "flex items-center gap-2 bg-orange-500 text-white hover:bg-orange-600",
+              activeSections.includes('analytics') && "bg-orange-600"
+            )}
+          >
+            <BarChart3 className="h-4 w-4" />
+            Analytics
+            <ChevronDown className={cn(
+              "ml-2 h-4 w-4 transition-transform",
+              activeSections.includes('analytics') && "rotate-180"
             )} />
           </Button>
         </div>
@@ -633,6 +727,17 @@ export default function AdminPanel() {
                 />
               ))}
             </div>
+          </div>
+        )}
+
+        {activeSections.includes('analytics') && (
+          <div className={cn(
+            "space-y-4",
+            (activeSections.includes('users') || 
+             activeSections.includes('boss-tracker') || 
+             activeSections.includes('all-bosses')) && "mt-4"
+          )}>
+            <Analytics />
           </div>
         )}
 

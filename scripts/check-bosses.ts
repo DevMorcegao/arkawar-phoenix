@@ -1,6 +1,7 @@
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import axios from 'axios';
+import { logger } from '../lib/logger';
 
 interface ServiceAccount {
   projectId: string | undefined;
@@ -21,10 +22,10 @@ initializeApp({
 const db = getFirestore();
 
 async function checkBosses() {
-  console.log('🔍 Iniciando verificação de bosses...');
+  logger.info('CheckBosses', 'Starting boss check');
   
   const now = new Date();
-  console.log(`⏰ Hora atual: ${now.toISOString()}`);
+  logger.info('CheckBosses', 'Current time', { time: now.toISOString() });
   
   try {
     // Limpar notificações antigas (mais de 1 hora)
@@ -32,7 +33,7 @@ async function checkBosses() {
       .where('sentAt', '<', new Date(now.getTime() - 60 * 60 * 1000))
       .get();
     
-    console.log(`🧹 Limpando ${oldNotifications.size} notificações antigas`);
+    logger.info('CheckBosses', 'Cleaning old notifications', { count: oldNotifications.size });
     
     for (const doc of oldNotifications.docs) {
       await doc.ref.delete();
@@ -42,22 +43,22 @@ async function checkBosses() {
       .where('status', '==', 'pending')
       .get();
 
-    console.log(`📋 Bosses encontrados: ${bossesSnapshot.size}`);
+    logger.info('CheckBosses', 'Bosses found', { count: bossesSnapshot.size });
 
     const notificationsRef = db.collection('bossNotifications');
 
     for (const doc of bossesSnapshot.docs) {
       const boss = doc.data();
-      console.log('Boss data:', boss);
+      logger.debug('CheckBosses', 'Boss data', { boss });
 
       const spawnTime = new Date(boss.spawnTime);
-      console.log(`Spawn time: ${spawnTime.toISOString()}`);
+      logger.debug('CheckBosses', 'Spawn time', { time: spawnTime.toISOString() });
       
       const timeUntilSpawn = Math.floor(
         (spawnTime.getTime() - now.getTime()) / (1000 * 60)
       );
       
-      console.log(`Minutos até o spawn: ${timeUntilSpawn}`);
+      logger.debug('CheckBosses', 'Minutes until spawn', { minutes: timeUntilSpawn });
 
       const intervals = [30, 20, 10, 5];
       for (const minutes of intervals) {
@@ -71,9 +72,11 @@ async function checkBosses() {
              notificationDoc.data()?.sentAt.toDate().getTime() < now.getTime() - 60 * 60 * 1000);
 
           if (shouldNotify) {
-            console.log(`Enviando nova notificação de ${minutes} minutos...`);
-            console.log(`Tentando enviar notificação de ${minutes} minutos para ${boss.name} (Canal ${boss.channel})`);
-            
+            logger.info('CheckBosses', `Sending ${minutes} minutes notification`, {
+              boss: boss.name,
+              channel: boss.channel
+            });
+
             try {
               const response = await axios.post(process.env.DISCORD_WEBHOOK_URL!, {
                 content: `@everyone\n🚨 **ALERTA DE BOSS** 🚨\nO boss **${boss.name}** vai nascer em ${minutes} minutos!`,
@@ -108,28 +111,31 @@ async function checkBosses() {
                   color: minutes <= 5 ? 15158332 : 15105570
                 }]
               });
-              console.log('Resposta do Discord:', response.status);
+
+              logger.debug('CheckBosses', 'Discord response status', { status: response.status });
 
               await notificationsRef.doc(notificationId).set({
                 bossId: boss.id,
                 minutes,
                 sentAt: new Date()
               });
-              console.log('Notificação registrada no Firestore');
+              logger.info('CheckBosses', 'Notification registered in Firestore');
             } catch (error) {
-              console.error('Erro ao enviar notificação:', error);
+              logger.error('CheckBosses', 'Error sending notification', { error });
               if (axios.isAxiosError(error)) {
-                console.error('Detalhes do erro:', error.response?.data);
+                logger.error('CheckBosses', 'Error details', { 
+                  details: axios.isAxiosError(error) ? error.response?.data : error 
+                });
               }
             }
           } else {
-            console.log(`Notificação de ${minutes} minutos já enviada recentemente`);
+            logger.debug('CheckBosses', `${minutes} minutes notification already sent recently`);
           }
         }
       }
     }
   } catch (error) {
-    console.error('❌ Erro ao processar notificações:', error);
+    logger.error('CheckBosses', 'Error processing notifications', { error });
     console.error('Detalhes do erro:', error instanceof Error ? error.message : error);
   }
 }

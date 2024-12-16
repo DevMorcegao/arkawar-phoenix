@@ -20,6 +20,7 @@ import { differenceInHours, differenceInMinutes } from 'date-fns'
 import { initializeOCRWorker, processImage } from '@/app/utils/ocrProcessor'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/logger'
+import { logBossAction } from '@/lib/logActions'
 
 const BossTracker: React.FC = () => {
   const [bosses, setBosses] = useState<Boss[]>([])
@@ -279,6 +280,18 @@ const BossTracker: React.FC = () => {
         // Usar setDoc com o ID gerado localmente
         const bossRef = doc(db, 'bossSpawns', updatedBoss.id)
         await setDoc(bossRef, newBoss)
+
+        // Adiciona o log da ação com os dados corretos
+        await logBossAction(
+          user.uid,
+          user.displayName || user.email || 'Unknown User',
+          'added',
+          {
+            id: updatedBoss.id,
+            name: updatedBoss.name,
+            channel: updatedBoss.channel
+          }
+        )
         
         setPendingBoss(null)
         toast.success(`Boss ${updatedBoss.name} adicionado à lista.`)
@@ -348,6 +361,18 @@ const BossTracker: React.FC = () => {
         lastUpdated: serverTimestamp()
       })
 
+      // Adiciona o log da ação
+      await logBossAction(
+        user.uid,
+        user.displayName || user.email || 'Unknown User',
+        status === 'killed' ? 'killed' : 'noshow',
+        {
+          id: id,
+          name: bossData.name,
+          channel: bossData.channel
+        }
+      )
+
       logger.info('BossTracker', 'Boss status updated successfully')
       toast.success(status === 'killed' ? 'Boss marcado como morto!' : 'Boss marcado como não aparecido!')
     } catch (error) {
@@ -389,6 +414,18 @@ const BossTracker: React.FC = () => {
         appearanceStatus: 'deleted',
         lastUpdated: serverTimestamp()
       })
+
+      // Adiciona o log da ação
+      await logBossAction(
+        user.uid,
+        user.displayName || user.email || 'Unknown User',
+        'deleted',
+        {
+          id: id,
+          name: bossData.name,
+          channel: bossData.channel
+        }
+      )
 
       logger.info('BossTracker', 'Boss marked as deleted successfully')
       toast.success('Boss removido com sucesso.')
@@ -438,6 +475,59 @@ const BossTracker: React.FC = () => {
 
       logger.debug('BossTracker', 'Updating boss', { updateData })
       await setDoc(bossRef, updateData, { merge: true })
+
+      // Adiciona o log da ação
+      const getChangedFields = (oldBoss: Boss, newBoss: Boss) => {
+        const changes: {
+          field: string;
+          oldValue: string;
+          newValue: string;
+        }[] = [];
+
+        if (oldBoss.name !== newBoss.name) {
+          changes.push({
+            field: 'name',
+            oldValue: oldBoss.name,
+            newValue: newBoss.name
+          });
+        }
+
+        if (oldBoss.channel !== newBoss.channel) {
+          changes.push({
+            field: 'channel',
+            oldValue: oldBoss.channel || '',
+            newValue: newBoss.channel || ''
+          });
+        }
+
+        if (oldBoss.capturedTime !== newBoss.capturedTime) {
+          changes.push({
+            field: 'capturedTime',
+            oldValue: oldBoss.capturedTime || '',
+            newValue: newBoss.capturedTime || ''
+          });
+        }
+
+        return changes;
+      };
+
+      const changes = getChangedFields(currentBoss, updatedBoss);
+
+      // Criar um único log com todas as alterações
+      await logBossAction(
+        user.uid,
+        user.displayName || user.email || 'Unknown User',
+        'edited',
+        {
+          id: updatedBoss.id,
+          name: updatedBoss.name,
+          channel: updatedBoss.channel
+        },
+        {
+          changes // Passamos o array completo de mudanças
+        }
+      );
+
       logger.info('BossTracker', 'Boss updated successfully')
       toast.success('Boss atualizado com sucesso!')
     } catch (error) {
