@@ -6,15 +6,26 @@ import { Button } from "@/components/ui/button"
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
 } from 'recharts'
-import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore'
+import { collection, query, where, getDocs, Timestamp, orderBy } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { startOfDay, startOfWeek, startOfMonth, startOfYear, endOfDay } from 'date-fns'
 import { cn } from "@/lib/utils"
 import { logger } from '@/lib/logger'
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+import { ChevronLeft, ChevronRight, Filter } from "lucide-react"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 type TimeRange = 'day' | 'week' | 'month' | 'year'
 
-interface LogData {
+interface LogEntry {
+  id: string
   action: 'added' | 'killed' | 'noshow' | 'edited' | 'deleted'
   timestamp: Date
   userId: string
@@ -38,10 +49,27 @@ interface ChartData {
   deleted: number
 }
 
+interface FilterOptions {
+  action: string
+  bossName: string
+  channel: string
+}
+
+const ITEMS_PER_PAGE = 20
+
 export default function Analytics() {
   const [timeRange, setTimeRange] = useState<TimeRange>('day')
   const [chartData, setChartData] = useState<ChartData[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [logs, setLogs] = useState<LogEntry[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const [filters, setFilters] = useState<FilterOptions>({
+    action: '',
+    bossName: '',
+    channel: ''
+  })
+  const [totalPages, setTotalPages] = useState(1)
+  const [showFilters, setShowFilters] = useState(false)
 
   const getStartDate = useCallback((range: TimeRange) => {
     const now = new Date()
@@ -64,53 +92,99 @@ export default function Analytics() {
     setIsLoading(true)
     try {
       const startDate = getStartDate(range)
-      logger.debug('Analytics', 'Start date', { startDate })
-
-      const logsRef = collection(db, 'bossLogs')
-      const q = query(
-        logsRef,
+      
+      // Query base apenas com timestamp
+      const baseQuery = query(
+        collection(db, 'bossLogs'),
         where('timestamp', '>=', Timestamp.fromDate(startDate)),
-        where('timestamp', '<=', Timestamp.fromDate(endOfDay(new Date())))
+        where('timestamp', '<=', Timestamp.fromDate(endOfDay(new Date()))),
+        orderBy('timestamp', 'desc')
       )
 
-      const querySnapshot = await getDocs(q)
-      logger.debug('Analytics', 'Logs found', { count: querySnapshot.size })
-
-      const logs = querySnapshot.docs.map(doc => ({
+      // Buscar todos os documentos
+      const querySnapshot = await getDocs(baseQuery)
+      const allLogs = querySnapshot.docs.map(doc => ({
+        id: doc.id,
         ...doc.data(),
         timestamp: doc.data().timestamp?.toDate()
-      })) as LogData[]
+      })) as LogEntry[]
 
-      logger.debug('Analytics', 'Processed logs', { logs })
+      // Aplicar todos os filtros nos dados
+      let filteredLogs = allLogs
 
-      // Processar dados para o gráfico
+      // Filtrar por ação
+      if (filters.action && filters.action !== 'all') {
+        filteredLogs = filteredLogs.filter(log => log.action === filters.action)
+      }
+
+      // Filtrar por nome do boss
+      if (filters.bossName) {
+        filteredLogs = filteredLogs.filter(log => 
+          log.bossName?.toLowerCase().includes(filters.bossName.toLowerCase())
+        )
+      }
+
+      // Filtrar por canal
+      if (filters.channel) {
+        filteredLogs = filteredLogs.filter(log => 
+          log.channel?.toLowerCase().includes(filters.channel.toLowerCase())
+        )
+      }
+
+      // Calcular total de páginas após filtros
+      const totalFilteredDocs = filteredLogs.length
+      setTotalPages(Math.ceil(totalFilteredDocs / ITEMS_PER_PAGE))
+
+      // Aplicar paginação nos resultados filtrados
+      const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
+      const endIndex = startIndex + ITEMS_PER_PAGE
+      const paginatedLogs = filteredLogs.slice(startIndex, endIndex)
+      
+      setLogs(paginatedLogs)
+
+      // Usar logs filtrados para o gráfico
       const data: ChartData[] = [{
         name: 'Ações',
-        added: logs.filter(log => log.action === 'added').length,
-        killed: logs.filter(log => log.action === 'killed').length,
-        noshow: logs.filter(log => log.action === 'noshow').length,
-        edited: logs.filter(log => log.action === 'edited').length,
-        deleted: logs.filter(log => log.action === 'deleted').length
+        added: filteredLogs.filter(log => log.action === 'added').length,
+        killed: filteredLogs.filter(log => log.action === 'killed').length,
+        noshow: filteredLogs.filter(log => log.action === 'noshow').length,
+        edited: filteredLogs.filter(log => log.action === 'edited').length,
+        deleted: filteredLogs.filter(log => log.action === 'deleted').length
       }]
 
-      logger.debug('Analytics', 'Chart data', { data })
       setChartData(data)
+
+      // Se a página atual é maior que o total de páginas, voltar para a primeira
+      if (currentPage > Math.ceil(totalFilteredDocs / ITEMS_PER_PAGE)) {
+        setCurrentPage(1)
+      }
+
     } catch (error) {
-      logger.error('Analytics', 'Error fetching data', { error })
       logger.error('Analytics', 'Error fetching data', { error })
     } finally {
       setIsLoading(false)
     }
-  }, [getStartDate])
+  }, [getStartDate, currentPage, filters])
 
   useEffect(() => {
     fetchData(timeRange)
   }, [timeRange, fetchData])
 
+  // Reset página ao mudar filtros
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filters, timeRange])
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage)
+  }
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Análise de Atividades</CardTitle>
+        <div className="flex items-center justify-between mb-4">
+          <CardTitle>Análise de Atividades</CardTitle>
+        </div>
         <div className="flex space-x-2">
           <Button
             onClick={() => setTimeRange('day')}
@@ -231,6 +305,133 @@ export default function Analytics() {
               />
             </BarChart>
           </ResponsiveContainer>
+        )}
+
+        <div className="w-full border-t mt-6 mb-6"></div>
+
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-4">
+            <h3 className="text-2xl font-semibold leading-none tracking-tight">
+              Log de Atividades
+            </h3>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              <Filter className="h-4 w-4 mr-2" />
+              Filtros
+            </Button>
+          </div>
+          <span className="text-sm text-muted-foreground">
+            {timeRange === 'day' && 'Hoje'}
+            {timeRange === 'week' && 'Esta Semana'}
+            {timeRange === 'month' && 'Este Mês'}
+            {timeRange === 'year' && 'Este Ano'}
+          </span>
+        </div>
+
+        {showFilters && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div>
+              <Select
+                value={filters.action}
+                onValueChange={(value) => setFilters(prev => ({ ...prev, action: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Filtrar por ação" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as ações</SelectItem>
+                  <SelectItem value="added">Adicionados</SelectItem>
+                  <SelectItem value="killed">Mortos</SelectItem>
+                  <SelectItem value="noshow">Não apareceu</SelectItem>
+                  <SelectItem value="edited">Editados</SelectItem>
+                  <SelectItem value="deleted">Removidos</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Input
+                placeholder="Filtrar por boss"
+                value={filters.bossName}
+                onChange={(e) => setFilters(prev => ({ ...prev, bossName: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Input
+                placeholder="Filtrar por canal"
+                value={filters.channel}
+                onChange={(e) => setFilters(prev => ({ ...prev, channel: e.target.value }))}
+              />
+            </div>
+          </div>
+        )}
+
+        <ScrollArea className="h-[300px]">
+          <div className="space-y-2 pr-4">
+            {logs.length > 0 ? (
+              logs.map((log) => (
+                <div 
+                  key={log.id} 
+                  className="text-sm p-2 rounded bg-muted"
+                >
+                  <span className="text-muted-foreground">
+                    {log.timestamp.toLocaleString('pt-BR')}
+                  </span>
+                  {' - '}
+                  <span className="font-medium">{log.userName}</span>
+                  {' '}
+                  <span>
+                    {log.action === 'added' && 'adicionou'}
+                    {log.action === 'killed' && 'marcou como morto'}
+                    {log.action === 'noshow' && 'marcou como não aparecido'}
+                    {log.action === 'edited' && 'editou'}
+                    {log.action === 'deleted' && 'removeu'}
+                  </span>
+                  {' '}
+                  <span className="font-medium">
+                    {log.bossName}
+                  </span>
+                  {log.channel && (
+                    <span className="text-muted-foreground">
+                      {' no '}{log.channel}
+                    </span>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="text-center text-muted-foreground">
+                Nenhuma atividade encontrada para este período
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+
+        {logs.length > 0 && (
+          <div className="flex items-center justify-between mt-4">
+            <div className="text-sm text-muted-foreground">
+              Página {currentPage} de {totalPages}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         )}
       </CardContent>
     </Card>
