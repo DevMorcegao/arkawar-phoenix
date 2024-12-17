@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { ChevronDown, ChevronUp, Clock, CheckCircle2, AlertCircle, Filter, X } from 'lucide-react'
+import { Clock, CheckCircle2, AlertCircle, Filter} from 'lucide-react'
 import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { Boss } from '@/app/types/boss'
@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { useDiscordNotifications } from '@/hooks/useDiscordNotifications'
 
 // Estender a interface Window
 declare global {
@@ -28,8 +29,8 @@ export default function BossStatus() {
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [selectedChannels, setSelectedChannels] = useState<string[]>([])
   const [selectedBosses, setSelectedBosses] = useState<string[]>([])
-  const [bosses, setBosses] = useState<Boss[]>([])
   const [bossStatuses, setBossStatuses] = useState<BossStatusInfo[]>([])
+  const [pendingBosses, setPendingBosses] = useState<Boss[]>([])
   const [loading, setLoading] = useState(true)
 
   // Lista de canais disponíveis
@@ -70,41 +71,26 @@ export default function BossStatus() {
   }, [openModal, closeModal])
 
   useEffect(() => {
-    // Busca bosses mortos e pendentes do Firestore
-    const killedQuery = query(
+    // Busca bosses mortos e pendentes do Firestore em uma única query
+    const bossesQuery = query(
       collection(db, 'bossSpawns'),
-      where('status', '==', 'killed')
+      where('status', 'in', ['killed', 'pending'])
     )
 
-    const pendingQuery = query(
-      collection(db, 'bossSpawns'),
-      where('status', '==', 'pending')
-    )
-
-    // Combina os resultados das duas queries
-    const unsubscribeKilled = onSnapshot(killedQuery, async (killedSnapshot) => {
-      const unsubscribePending = onSnapshot(pendingQuery, async (pendingSnapshot) => {
-        const bosses: Boss[] = []
-        
-        // Adiciona bosses mortos
-        killedSnapshot.forEach((doc) => {
-          bosses.push({ id: doc.id, ...doc.data() } as Boss)
-        })
-        
-        // Adiciona bosses pendentes
-        pendingSnapshot.forEach((doc) => {
-          bosses.push({ id: doc.id, ...doc.data() } as Boss)
-        })
-
-        const statuses = await calculateBossStatuses(bosses)
-        setBossStatuses(statuses)
-        setLoading(false)
+    const unsubscribe = onSnapshot(bossesQuery, async (snapshot) => {
+      const fetchedBosses: Boss[] = []
+      
+      snapshot.forEach((doc) => {
+        fetchedBosses.push({ id: doc.id, ...doc.data() } as Boss)
       })
 
-      return () => unsubscribePending()
+      setPendingBosses(fetchedBosses.filter(boss => boss.status === 'pending'))
+      const statuses = await calculateBossStatuses(fetchedBosses)
+      setBossStatuses(statuses)
+      setLoading(false)
     })
 
-    return () => unsubscribeKilled()
+    return () => unsubscribe()
   }, [])
 
   // Atualiza o status a cada minuto
@@ -133,6 +119,20 @@ export default function BossStatus() {
 
     return () => clearInterval(timer)
   }, [isOpen])
+
+  // Usar o hook de notificações
+  useDiscordNotifications(
+    pendingBosses.map((boss: Boss) => ({
+      id: boss.id,
+      name: boss.name,
+      channel: boss.channel,
+      spawnTime: boss.spawnTime,
+      spawnMap: boss.spawnMap || 'Desconhecido',
+      status: boss.status,
+      appearanceStatus: boss.appearanceStatus || 'pending'
+    })),
+    process.env.NEXT_PUBLIC_DISCORD_WEBHOOK_URL || ''
+  )
 
   const getStatusColor = (status: string) => {
     switch (status) {

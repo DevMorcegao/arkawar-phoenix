@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from 'react'
-import { collection, setDoc, doc, onSnapshot, updateDoc, query, where, getDoc, serverTimestamp, getDocs  } from 'firebase/firestore'
+import { collection, setDoc, doc, onSnapshot, updateDoc, query, where, getDoc, serverTimestamp, getDocs, orderBy, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,7 +16,7 @@ import BossCard from './BossCard'
 import BossConfirmation from './BossConfirmation'
 import AddBossButton from './AddBossButton'
 import { addHours, addMinutes, subMinutes } from 'date-fns'
-import { differenceInHours, differenceInMinutes } from 'date-fns'
+import { differenceInHours } from 'date-fns'
 import { initializeOCRWorker, processImage } from '@/app/utils/ocrProcessor'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/logger'
@@ -29,6 +29,9 @@ const BossTracker: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [sortBy, setSortBy] = useState<'time' | 'name' | 'channel'>('time')
   const { user } = useAuth()
+
+  // Cache local de bosses pendentes
+  const [pendingBossesCache, setPendingBossesCache] = useState<{[key: string]: boolean}>({});
 
   useEffect(() => {
     if (!user) return
@@ -70,6 +73,25 @@ const BossTracker: React.FC = () => {
 
     return () => unsubscribe()
   }, [user, sortOrder, sortBy])
+
+  // Atualizar cache quando componente montar
+  useEffect(() => {
+    const q = query(
+      collection(db, 'bossSpawns'),
+      where('status', '==', 'pending')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const cache: {[key: string]: boolean} = {};
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        cache[`${data.name}-${data.channel}`] = true;
+      });
+      setPendingBossesCache(cache);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const handleSort = (newSortBy: 'time' | 'name' | 'channel') => {
     if (newSortBy === sortBy) {
@@ -161,79 +183,96 @@ const BossTracker: React.FC = () => {
     }
   }, [processBossInfo, user])
 
+  const checkDuplicateBoss = async (bossName: string, channel: string): Promise<boolean> => {
+    // Usar cache local ao invés de fazer query
+    return !!pendingBossesCache[`${bossName}-${channel}`];
+  };
+
   const checkBossRespawnTime = async (bossName: string, channel: string): Promise<{ canSpawn: boolean; message?: string }> => {
     try {
       const respawnInfo = bossRespawnData[bossName]
-      if (!respawnInfo) return { canSpawn: true } // Se o boss não está na lista de respawn, permite adicionar
+      if (!respawnInfo) {
+        logger.debug('BossTracker', 'Boss não encontrado na lista de respawn', { bossName });
+        return { canSpawn: true }
+      }
 
-      // Primeiro, buscar todos os registros do mesmo boss no mesmo canal que foram mortos
+      // Buscar apenas o boss mais recente no mesmo canal que foi morto
       const q = query(
         collection(db, 'bossSpawns'),
         where('name', '==', bossName),
         where('channel', '==', channel),
-        where('status', '==', 'killed')
+        where('status', '==', 'killed'),
+        orderBy('spawnTime', 'desc'),
+        limit(1)
       )
 
-      const snapshot = await getDocs(q)
-      if (snapshot.empty) return { canSpawn: true }
+      let snapshot;
+      try {
+        snapshot = await getDocs(q);
+      } catch (queryError: any) {
+        const errorDetails = {
+          code: queryError?.code,
+          message: queryError?.message || 'Erro desconhecido',
+          bossName,
+          channel
+        };
+        logger.error('BossTracker', 'Erro ao consultar o Firestore', errorDetails);
+        // Não lançamos o erro, apenas retornamos que pode spawnar
+        return { canSpawn: true };
+      }
 
-      // Encontrar o registro mais recente localmente
-      const sortedDocs = snapshot.docs
-        .map(doc => ({
+      if (snapshot.empty) {
+        logger.debug('BossTracker', 'Nenhum registro anterior encontrado', { bossName, channel });
+        return { canSpawn: true }
+      }
 
-          ...doc.data(),
-          spawnTime: doc.data().spawnTime,
-        }))
-        .sort((a, b) => new Date(b.spawnTime).getTime() - new Date(a.spawnTime).getTime())
+      const killedBoss = snapshot.docs[0].data()
+      if (!killedBoss.spawnTime) {
+        logger.warn('BossTracker', 'Boss encontrado sem spawnTime', { killedBoss });
+        return { canSpawn: true }
+      }
 
-      if (sortedDocs.length === 0) return { canSpawn: true }
-
-      // Usar o horário de spawn + 5 minutos como referência
-      const lastSpawnTime = new Date(sortedDocs[0].spawnTime)
-      const lastKillTime = addMinutes(lastSpawnTime, 5) // Adiciona 5 minutos ao horário de spawn
+      const lastSpawnTime = new Date(killedBoss.spawnTime)
+      const lastKillTime = addMinutes(lastSpawnTime, 5)
       const now = new Date()
       const hoursSinceKill = differenceInHours(now, lastKillTime)
-      const minutesSinceKill = differenceInMinutes(now, lastKillTime) % 60
 
-      // Calcula o tempo até poder adicionar (6 horas antes do tempo mínimo)
-      const earlyAddHours = respawnInfo.minHours - 6
-      const hoursUntilEarlyAdd = earlyAddHours - hoursSinceKill
+      logger.debug('BossTracker', 'Verificação de tempo de respawn', {
+        bossName,
+        channel,
+        lastKillTime: lastKillTime.toISOString(),
+        hoursSinceKill,
+        minHours: respawnInfo.minHours,
+        maxHours: respawnInfo.maxHours
+      });
 
-      if (hoursSinceKill < earlyAddHours) {
+      if (hoursSinceKill < respawnInfo.minHours) {
+        const remainingHours = respawnInfo.minHours - hoursSinceKill
         return {
-          canSpawn: true, // Permite adicionar mesmo que falte tempo
-          message: `Este boss foi morto há ${hoursSinceKill}h ${minutesSinceKill}m. Tempo mínimo de respawn: ${respawnInfo.minHours}h. Faltam ${hoursUntilEarlyAdd}h para o tempo mínimo.`
+          canSpawn: false,
+          message: `O boss ${bossName} só pode ser adicionado após ${respawnInfo.minHours}h do último kill. Faltam ${Math.ceil(remainingHours)}h.`
         }
       }
 
-      if (hoursSinceKill < respawnInfo.maxHours) {
+      if (hoursSinceKill > respawnInfo.maxHours) {
         return {
           canSpawn: true,
-          message: `Atenção: Este boss foi morto há ${hoursSinceKill}h ${minutesSinceKill}m. Tempo de respawn: ${respawnInfo.minHours}h ~ ${respawnInfo.maxHours}h.`
+          message: `Atenção: O boss ${bossName} está há mais de ${respawnInfo.maxHours}h sem aparecer!`
         }
       }
 
       return { canSpawn: true }
-    } catch (error) {
-      logger.error('BossTracker', 'Error checking boss respawn time', { error })
-      return { canSpawn: true } // Em caso de erro, permite adicionar
-    }
-  }
-
-  const checkDuplicateBoss = async (bossName: string, channel: string): Promise<boolean> => {
-    try {
-      const q = query(
-        collection(db, 'bossSpawns'),
-        where('name', '==', bossName),
-        where('channel', '==', channel),
-        where('status', '==', 'pending')
-      )
-
-      const snapshot = await getDocs(q)
-      return !snapshot.empty
-    } catch (error) {
-      logger.error('BossTracker', 'Error checking duplicate boss', { error })
-      return false // Em caso de erro, permite adicionar
+    } catch (error: any) {
+      const errorDetails = {
+        code: error?.code,
+        message: error?.message || 'Erro desconhecido',
+        stack: error?.stack,
+        bossName,
+        channel
+      };
+      logger.error('BossTracker', 'Erro ao verificar tempo de respawn do boss', errorDetails);
+      // Em caso de qualquer outro erro, permitimos o spawn
+      return { canSpawn: true }
     }
   }
 
@@ -295,8 +334,18 @@ const BossTracker: React.FC = () => {
         
         setPendingBoss(null)
         toast.success(`Boss ${updatedBoss.name} adicionado à lista.`)
-      } catch (error) {
-        logger.error('BossTracker', 'Error saving boss data', { error })
+      } catch (error: any) {
+        const errorDetails = {
+          code: error?.code,
+          message: error?.message || 'Erro desconhecido',
+          stack: error?.stack,
+          bossInfo: {
+            name: updatedBoss.name,
+            channel: updatedBoss.channel,
+            id: updatedBoss.id
+          }
+        };
+        logger.error('BossTracker', 'Erro ao salvar dados do boss', errorDetails);
         toast.error('Erro ao salvar dados do boss. Tente novamente.')
       }
     } else {

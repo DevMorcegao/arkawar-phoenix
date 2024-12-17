@@ -39,6 +39,7 @@
 //       await doc.ref.delete();
 //     }
 
+//     // Buscar todos os bosses pendentes em uma única query
 //     const bossesSnapshot = await db.collection('bossSpawns')
 //       .where('status', '==', 'pending')
 //       .get();
@@ -49,24 +50,17 @@
 
 //     for (const doc of bossesSnapshot.docs) {
 //       const boss = doc.data();
-//       logger.debug('CheckBosses', 'Boss data', { boss });
-
 //       const spawnTime = new Date(boss.spawnTime);
-//       logger.debug('CheckBosses', 'Spawn time', { time: spawnTime.toISOString() });
-      
 //       const timeUntilSpawn = Math.floor(
 //         (spawnTime.getTime() - now.getTime()) / (1000 * 60)
 //       );
       
-//       logger.debug('CheckBosses', 'Minutes until spawn', { minutes: timeUntilSpawn });
-
 //       const intervals = [30, 20, 10, 5];
 //       for (const minutes of intervals) {
 //         if (timeUntilSpawn >= minutes - 1 && timeUntilSpawn <= minutes) {
 //           const notificationId = `${boss.id}_${minutes}`;
 //           const notificationDoc = await notificationsRef.doc(notificationId).get();
           
-//           // Verifica se a notificação existe e se foi enviada há mais de 1 hora
 //           const shouldNotify = !notificationDoc.exists || 
 //             (notificationDoc.exists && 
 //              notificationDoc.data()?.sentAt.toDate().getTime() < now.getTime() - 60 * 60 * 1000);
@@ -76,9 +70,9 @@
 //               boss: boss.name,
 //               channel: boss.channel
 //             });
-//             logger.debug('CheckBosses', 'Discord response status', { status: response.status });
 
 //             try {
+//               // Enviar uma única notificação para o Discord
 //               const response = await axios.post(process.env.DISCORD_WEBHOOK_URL!, {
 //                 content: `@everyone\n🚨 **ALERTA DE BOSS** 🚨\nO boss **${boss.name}** vai nascer em ${minutes} minutos!`,
 //                 embeds: [{
@@ -112,13 +106,16 @@
 //                   color: minutes <= 5 ? 15158332 : 15105570
 //                 }]
 //               });
-//               console.log('Resposta do Discord:', response.status);
 
+//               logger.debug('CheckBosses', 'Discord response status', { status: response.status });
+
+//               // Registrar a notificação enviada
 //               await notificationsRef.doc(notificationId).set({
 //                 bossId: boss.id,
 //                 minutes,
 //                 sentAt: new Date()
 //               });
+              
 //               logger.info('CheckBosses', 'Notification registered in Firestore');
 //             } catch (error) {
 //               logger.error('CheckBosses', 'Error sending notification', { error });
