@@ -14,7 +14,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { db } from "@/lib/firebase"
-import { collection, query, updateDoc, doc, deleteDoc, onSnapshot, getDoc, serverTimestamp, where, setDoc, getDocs } from "firebase/firestore"
+import { collection, query, updateDoc, doc, deleteDoc, onSnapshot, getDoc, serverTimestamp, where, setDoc, getDocs, orderBy } from "firebase/firestore"
 import { UserInfo } from "firebase/auth"
 import { 
   ChevronDown,
@@ -38,6 +38,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { logger } from '@/lib/logger'
 import { logBossAction } from '@/lib/logActions'
 import Analytics from './Analytics'
+import { monitoringService } from '../lib/services/monitoringService'
+import { useDiscordNotifications } from '@/hooks/useDiscordNotifications'
 
 interface FirebaseUser extends UserInfo {
   role?: string
@@ -54,6 +56,26 @@ export default function AdminPanel() {
   const { user, isAdmin } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const [pendingBosses, setPendingBosses] = useState<Boss[]>([])
+
+  // Função para ordenar os bosses
+  const sortBosses = useCallback((bosses: Boss[]) => {
+    return [...bosses].sort((a, b) => {
+      if (sortBy === 'time') {
+        const timeA = new Date(a.spawnTime).getTime()
+        const timeB = new Date(b.spawnTime).getTime()
+        return sortOrder === 'asc' ? timeA - timeB : timeB - timeA
+      } else if (sortBy === 'name') {
+        return sortOrder === 'asc' 
+          ? a.name.localeCompare(b.name)
+          : b.name.localeCompare(a.name)
+      } else {
+        const channelA = parseInt((a.channel || 'Channel 0').replace(/\D/g, '')) || 0
+        const channelB = parseInt((b.channel || 'Channel 0').replace(/\D/g, '')) || 0
+        return sortOrder === 'asc' ? channelA - channelB : channelB - channelA
+      }
+    })
+  }, [sortBy, sortOrder])
 
   // Pega todas as seções ativas da URL
   const activeSections = searchParams.getAll('section')
@@ -108,48 +130,100 @@ export default function AdminPanel() {
   }, [searchParams, router, activeSections])
 
   useEffect(() => {
-    if (!user) return
+    if (!user) return;
 
-    const unsubscribeUsers = subscribeToUsers()
-    const unsubscribeBosses = onSnapshot(
-      query(
-        collection(db, 'bossSpawns'),
-        where('status', '==', 'pending')
-      ),
-      (snapshot) => {
-        const updatedBosses = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          lastUpdated: doc.data().lastUpdated?.toDate() || null,
-          createdAt: doc.data().createdAt?.toDate() || null
-        } as Boss))
+    logger.info('AdminPanel', '🎧 Iniciando listener principal de bosses pendentes');
 
-        // Ordenar bosses
-        const sortedBosses = [...updatedBosses].sort((a, b) => {
-          if (sortBy === 'time') {
-            const timeA = new Date(a.spawnTime).getTime()
-            const timeB = new Date(b.spawnTime).getTime()
-            return sortOrder === 'asc' ? timeA - timeB : timeB - timeA
-          } else if (sortBy === 'name') {
-            return sortOrder === 'asc' 
-              ? a.name.localeCompare(b.name)
-              : b.name.localeCompare(a.name)
-          } else { // channel
-            const channelA = parseInt((a.channel || 'Channel 0').replace(/\D/g, '')) || 0
-            const channelB = parseInt((b.channel || 'Channel 0').replace(/\D/g, '')) || 0
-            return sortOrder === 'asc' ? channelA - channelB : channelB - channelA
-          }
-        })
+    // Calcular timestamp de 48 horas atrás
+    const fortyEightHoursAgo = new Date();
+    fortyEightHoursAgo.setHours(fortyEightHoursAgo.getHours() - 48);
 
-        setAllBosses(sortedBosses)
-      }
-    )
+    // Query para todos os bosses das últimas 48 horas
+    const q = query(
+      collection(db, 'bossSpawns'),
+      where('lastUpdated', '>=', fortyEightHoursAgo),
+      orderBy('lastUpdated', 'desc')
+    );
+
+    // Carregar dados iniciais
+    getDocs(q).then((snapshot) => {
+      const initialBosses = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        lastUpdated: doc.data().lastUpdated?.toDate() || null,
+        createdAt: doc.data().createdAt?.toDate() || null
+      } as Boss));
+
+      // Filtrar apenas os bosses pendentes para o estado
+      const pendingBosses = initialBosses.filter(boss => boss.status === 'pending');
+      setAllBosses(sortBosses(pendingBosses));
+      setPendingBosses(pendingBosses);
+    });
+
+    // Configurar listener para atualizações
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      monitoringService.trackListenerUpdate('AdminPanel');
+      logger.info('AdminPanel', '📥 Dados recebidos do listener principal', {
+        totalDocs: snapshot.docs.length,
+        changes: snapshot.docChanges().map(change => ({
+          type: change.type,
+          docId: change.doc.id
+        }))
+      });
+
+      // Atualizar o estado com todos os documentos atuais
+      const updatedBosses = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        lastUpdated: doc.data().lastUpdated?.toDate() || null,
+        createdAt: doc.data().createdAt?.toDate() || null
+      } as Boss));
+
+      // Filtrar apenas os bosses pendentes para o estado
+      const pendingBosses = updatedBosses.filter(boss => boss.status === 'pending');
+      setAllBosses(sortBosses(pendingBosses));
+      setPendingBosses(pendingBosses);
+    }, (error) => {
+      logger.error('AdminPanel', '❌ Erro no listener principal', { error });
+    });
 
     return () => {
-      unsubscribeUsers()
-      unsubscribeBosses()
-    }
-  }, [user, sortOrder, sortBy])
+      logger.info('AdminPanel', '🛑 Desativando listener principal');
+      unsubscribe();
+    };
+  }, [user, sortBosses]);
+
+  // Usar o hook de notificações
+  useDiscordNotifications(
+    pendingBosses.map((boss: Boss) => ({
+      id: boss.id,
+      name: boss.name,
+      channel: boss.channel,
+      spawnTime: boss.spawnTime,
+      spawnMap: boss.spawnMap || 'Desconhecido',
+      status: boss.status,
+      appearanceStatus: boss.appearanceStatus || 'pending'
+    })),
+    process.env.NEXT_PUBLIC_DISCORD_WEBHOOK_URL || ''
+  )
+
+  // Adicionar useEffect separado para ordenação
+  useEffect(() => {
+    setAllBosses(prevBosses => sortBosses([...prevBosses]));
+  }, [sortOrder, sortBy, sortBosses]);
+
+  // Adicionar useEffect separado para os usuários
+  useEffect(() => {
+    if (!user) return;
+
+    logger.info('AdminPanel', '🎧 Iniciando listener de usuários');
+    const unsubscribeUsers = subscribeToUsers();
+
+    return () => {
+      logger.info('AdminPanel', '🛑 Desativando listener de usuários');
+      unsubscribeUsers();
+    };
+  }, [user]);
 
   const handleSort = (newSortBy: 'time' | 'name' | 'channel') => {
     if (newSortBy === sortBy) {

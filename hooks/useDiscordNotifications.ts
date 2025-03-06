@@ -1,15 +1,15 @@
 import { useEffect, useRef } from 'react';
 import { discordService } from '@/lib/services/discordService';
 import { Boss } from '@/app/types/boss';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { logger } from '@/lib/logger';
 
 interface NotificationRecord {
   thirtyMin: boolean;
-  twentyMin: boolean;
-  tenMin: boolean;
   fiveMin: boolean;
+  lastThirtyMinNotification?: Timestamp;
+  lastFiveMinNotification?: Timestamp;
   lastUpdated: Date;
 }
 
@@ -38,6 +38,9 @@ export const useDiscordNotifications = (bosses: Boss[], webhookUrl: string) => {
           (spawnTime.getTime() - currentTime.getTime()) / (1000 * 60)
         );
 
+        // Ignorar bosses que já passaram do tempo de spawn
+        if (timeUntilSpawn <= 0) continue;
+
         logger.debug('useDiscordNotifications', 'Verificando boss', { 
           boss: boss.name, 
           timeUntilSpawn: `${timeUntilSpawn} minutos até o spawn` 
@@ -50,70 +53,73 @@ export const useDiscordNotifications = (bosses: Boss[], webhookUrl: string) => {
           ? notificationDoc.data() as NotificationRecord
           : {
               thirtyMin: false,
-              twentyMin: false,
-              tenMin: false,
               fiveMin: false,
               lastUpdated: new Date(0)
             };
 
+        const now = new Date();
+        const COOLDOWN_PERIOD = 5 * 60 * 1000; // 5 minutos em milissegundos
+
         try {
-          // Verifica cada intervalo de tempo
+          // Verifica cada intervalo de tempo com cooldown
           if (timeUntilSpawn <= 30 && timeUntilSpawn >= 29 && !notificationData.thirtyMin) {
-            logger.info('useDiscordNotifications', 'Enviando notificação', { 
-              boss: boss.name, 
-              tempo: '30 minutos' 
-            });
-            await sendNotification(boss, 30);
-            await setDoc(notificationRef, {
-              ...notificationData,
-              thirtyMin: true,
-              lastUpdated: serverTimestamp()
-            });
-          }
-          else if (timeUntilSpawn <= 20 && timeUntilSpawn >= 19 && !notificationData.twentyMin) {
-            logger.info('useDiscordNotifications', 'Enviando notificação', { 
-              boss: boss.name, 
-              tempo: '20 minutos' 
-            });
-            await sendNotification(boss, 20);
-            await setDoc(notificationRef, {
-              ...notificationData,
-              twentyMin: true,
-              lastUpdated: serverTimestamp()
-            });
-          }
-          else if (timeUntilSpawn <= 10 && timeUntilSpawn >= 9 && !notificationData.tenMin) {
-            logger.info('useDiscordNotifications', 'Enviando notificação', { 
-              boss: boss.name, 
-              tempo: '10 minutos' 
-            });
-            await sendNotification(boss, 10);
-            await setDoc(notificationRef, {
-              ...notificationData,
-              tenMin: true,
-              lastUpdated: serverTimestamp()
-            });
+            const lastNotification = notificationData.lastThirtyMinNotification?.toDate();
+            const canSendNotification = !lastNotification || 
+              (now.getTime() - lastNotification.getTime()) > COOLDOWN_PERIOD;
+
+            if (canSendNotification) {
+              logger.info('useDiscordNotifications', 'Enviando notificação', { 
+                boss: boss.name, 
+                tempo: '30 minutos' 
+              });
+              await sendNotification(boss, 30);
+              await setDoc(notificationRef, {
+                ...notificationData,
+                thirtyMin: true,
+                lastThirtyMinNotification: serverTimestamp(),
+                lastUpdated: serverTimestamp()
+              });
+            } else {
+              logger.debug('useDiscordNotifications', 'Notificação em cooldown', {
+                boss: boss.name,
+                tempo: '30 minutos',
+                ultimaNotificacao: lastNotification
+              });
+            }
           }
           else if (timeUntilSpawn <= 5 && timeUntilSpawn >= 4 && !notificationData.fiveMin) {
-            logger.info('useDiscordNotifications', 'Enviando notificação', { 
-              boss: boss.name, 
-              tempo: '5 minutos' 
-            });
-            await sendNotification(boss, 5);
-            await setDoc(notificationRef, {
-              ...notificationData,
-              fiveMin: true,
-              lastUpdated: serverTimestamp()
-            });
+            const lastNotification = notificationData.lastFiveMinNotification?.toDate();
+            const canSendNotification = !lastNotification || 
+              (now.getTime() - lastNotification.getTime()) > COOLDOWN_PERIOD;
+
+            if (canSendNotification) {
+              logger.info('useDiscordNotifications', 'Enviando notificação', { 
+                boss: boss.name, 
+                tempo: '5 minutos' 
+              });
+              await sendNotification(boss, 5);
+              await setDoc(notificationRef, {
+                ...notificationData,
+                fiveMin: true,
+                lastFiveMinNotification: serverTimestamp(),
+                lastUpdated: serverTimestamp()
+              });
+            } else {
+              logger.debug('useDiscordNotifications', 'Notificação em cooldown', {
+                boss: boss.name,
+                tempo: '5 minutos',
+                ultimaNotificacao: lastNotification
+              });
+            }
           }
 
           // Limpar notificações antigas (mais de 1 hora após o spawn)
           if (timeUntilSpawn < -60) {
             await setDoc(notificationRef, {
               thirtyMin: false,
-              twentyMin: false,
-              tenMin: false,
               fiveMin: false,
+              lastThirtyMinNotification: null,
+              lastFiveMinNotification: null,
               lastUpdated: serverTimestamp()
             });
           }
@@ -147,8 +153,8 @@ export const useDiscordNotifications = (bosses: Boss[], webhookUrl: string) => {
     // Executa imediatamente ao montar o componente ou quando os bosses mudarem
     checkUpcomingBosses();
     
-    // Depois verifica a cada 30 segundos
-    const interval = setInterval(checkUpcomingBosses, 30000);
+    // Depois verifica a cada 1 minuto
+    const interval = setInterval(checkUpcomingBosses, 60000);
     return () => clearInterval(interval);
   }, [bosses, webhookUrl]);
 }; 

@@ -12,7 +12,8 @@
     "test:coverage": "vitest run --coverage",
     "cypress:open": "cypress open",
     "cypress:run": "cypress run",
-    "test:e2e": "start-server-and-test dev http://localhost:3000 cypress:run"
+    "test:e2e": "start-server-and-test dev http://localhost:3000 cypress:run",
+    "cleanup-bosses": "ts-node scripts/cleanup-bosses.ts"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^16.6.0",
@@ -51,7 +52,8 @@
     "recharts": "^2.13.3",
     "tailwind-merge": "^2.5.4",
     "tailwindcss-animate": "^1.0.7",
-    "tesseract.js": "^5.1.1"
+    "tesseract.js": "^5.1.1",
+    "zustand": "^5.0.2"
   },
   "devDependencies": {
     "@next/env": "^15.0.3",
@@ -68,6 +70,7 @@
     "@vitest/ui": "^2.1.5",
     "autoprefixer": "^10.4.20",
     "cypress": "^13.16.0",
+    "dotenv": "^16.4.7",
     "eslint": "^8.57.1",
     "eslint-config-next": "14.2.16",
     "happy-dom": "^15.11.6",
@@ -75,6 +78,7 @@
     "postcss": "^8.4.47",
     "start-server-and-test": "^2.0.8",
     "tailwindcss": "^3.4.14",
+    "ts-node": "^10.9.2",
     "typescript": "^5.6.3",
     "vitest": "^2.1.5"
   }

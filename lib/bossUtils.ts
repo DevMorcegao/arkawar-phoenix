@@ -8,12 +8,20 @@ export interface BossStatusInfo {
   status: 'available' | 'soon' | 'waiting' | 'deleted'
   timeRemaining?: number // em minutos
   lastKillTime?: Date
+  spawnTime?: string
 }
 
 export async function calculateBossStatuses(bosses: Boss[]): Promise<BossStatusInfo[]> {
   const bossStatuses: BossStatusInfo[] = []
   const now = new Date()
   const processedBosses = new Set<string>() // Para evitar duplicações
+
+  // Primeiro, processa todos os bosses pendentes
+  const pendingBosses = bosses.filter(b => b.status === 'pending')
+  pendingBosses.forEach(boss => {
+    const bossKey = `${boss.name}-${boss.channel}`
+    processedBosses.add(bossKey)
+  })
 
   const killedBosses = bosses
     .filter(b => b.status === 'killed')
@@ -30,37 +38,21 @@ export async function calculateBossStatuses(bosses: Boss[]): Promise<BossStatusI
       index === self.findIndex(b => b.name === boss.name && b.channel === boss.channel)
     )
 
-  // Primeiro, processa todos os bosses killed
+  // Processa os bosses killed que não têm um boss pendente correspondente
   for (const killedBoss of killedBosses) {
     const bossKey = `${killedBoss.name}-${killedBoss.channel}`
-    if (processedBosses.has(bossKey)) continue // Pula se já processou este boss+canal
-
-    // Verifica se existe um boss pendente para este boss/canal
-    const isPending = bosses.some(
-      b => b.name === killedBoss.name && 
-      b.channel === killedBoss.channel && 
-      b.status === 'pending'
-    )
-
-    // Se já existe um boss pendente, pula este boss
-    if (isPending) {
-      processedBosses.add(bossKey)
-      continue
-    }
+    if (processedBosses.has(bossKey)) continue
 
     const lastKillTimeUTC = parseISO(killedBoss.spawnTime)
-    const lastKillTime = addMinutes(lastKillTimeUTC, 5) // Adiciona 5 minutos ao tempo UTC
+    const lastKillTime = addMinutes(lastKillTimeUTC, 5)
     const respawnInfo = bossRespawnData[killedBoss.name]
-    const minRespawnHours = respawnInfo?.minHours || 24 // Default para 24h se não encontrar
-    const maxRespawnHours = respawnInfo?.maxHours || 32 // Default para 32h se não encontrar
-    const earlyAddHours = 6 // Permite adicionar 6 horas antes do tempo mínimo
+    const minRespawnHours = respawnInfo?.minHours || 24
+    const earlyAddHours = 6
 
     // Calcula a diferença de tempo
     const minRespawnTimeUTC = addHours(lastKillTime, minRespawnHours)
-    const maxRespawnTimeUTC = addHours(lastKillTime, maxRespawnHours)
     const earlyAddTimeUTC = addHours(lastKillTime, minRespawnHours - earlyAddHours)
     const minutesUntilMinRespawn = differenceInMinutes(minRespawnTimeUTC, now)
-    const minutesUntilMaxRespawn = differenceInMinutes(maxRespawnTimeUTC, now)
     const minutesUntilEarlyAdd = differenceInMinutes(earlyAddTimeUTC, now)
 
     // Determina o status baseado no tempo até early add E tempo até respawn mínimo
@@ -96,31 +88,21 @@ export async function calculateBossStatuses(bosses: Boss[]): Promise<BossStatusI
     processedBosses.add(bossKey)
   }
 
-  // Depois, adiciona status 'available' para canais sem boss killed ou pending
+  // Adiciona status 'available' para canais sem boss killed ou pending
   const channels = ['Channel 1', 'Channel 2', 'Channel 3', 'Channel 4', 'Channel 5', 
-                   'Channel 10', 'Channel 11', 'Channel 12', 'Channel 13']
+                   'Channel 9', 'Channel 10', 'Channel 11', 'Channel 12', 'Channel 13']
 
   for (const bossName of Object.keys(bossRespawnData)) {
     for (const channel of channels) {
       const bossKey = `${bossName}-${channel}`
-      if (processedBosses.has(bossKey)) continue // Pula se já processou este boss+canal
+      if (processedBosses.has(bossKey)) continue
 
-      // Verifica se existe um boss pending
-      const pendingBoss = bosses.find(
-        b => b.name === bossName && 
-        b.channel === channel && 
-        b.status === 'pending'
-      )
-
-      // Se não existe status e não existe pending, marca como available
-      if (!pendingBoss) {
-        bossStatuses.push({
-          name: bossName,
-          channel,
-          status: 'available'
-        })
-        processedBosses.add(bossKey)
-      }
+      bossStatuses.push({
+        name: bossName,
+        channel,
+        status: 'available'
+      })
+      processedBosses.add(bossKey)
     }
   }
 
@@ -156,4 +138,12 @@ export function formatTimeRemaining(minutes: number): string {
     return `${mins}m`
   }
   return `${hours}h${mins}m`
+}
+
+export function calculateTimeRemaining(spawnTime: string | undefined): number {
+  if (!spawnTime) return 0
+  const now = new Date()
+  const spawnDate = new Date(spawnTime)
+  const diffInMinutes = Math.floor((spawnDate.getTime() - now.getTime()) / (1000 * 60))
+  return Math.max(0, diffInMinutes)
 }

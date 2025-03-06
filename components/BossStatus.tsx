@@ -6,15 +6,13 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Clock, CheckCircle2, AlertCircle, Filter} from 'lucide-react'
-import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
-import { Boss } from '@/app/types/boss'
-import { BossStatusInfo, calculateBossStatuses, formatTimeRemaining } from '@/lib/bossUtils'
+import { BossStatusInfo, formatTimeRemaining } from '@/lib/bossUtils'
 import { cn } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
-import { useDiscordNotifications } from '@/hooks/useDiscordNotifications'
+import { logger } from '@/lib/logger'
+import { useBossStore } from '@/lib/stores/bossStore'
 
 // Estender a interface Window
 declare global {
@@ -29,13 +27,13 @@ export default function BossStatus() {
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [selectedChannels, setSelectedChannels] = useState<string[]>([])
   const [selectedBosses, setSelectedBosses] = useState<string[]>([])
-  const [bossStatuses, setBossStatuses] = useState<BossStatusInfo[]>([])
-  const [pendingBosses, setPendingBosses] = useState<Boss[]>([])
   const [loading, setLoading] = useState(true)
+
+  const { initialize, cleanup, bossStatuses, updateBossStatuses } = useBossStore()
 
   // Lista de canais disponíveis
   const channels = ['Channel 1', 'Channel 2', 'Channel 3', 'Channel 4', 'Channel 5', 
-                   'Channel 10', 'Channel 11', 'Channel 12', 'Channel 13']
+                   'Channel 9', 'Channel 10', 'Channel 11', 'Channel 12', 'Channel 13']
 
   // Lista única de nomes de bosses
   const uniqueBossNames = Array.from(new Set(bossStatuses.map(boss => boss.name))).sort()
@@ -71,68 +69,36 @@ export default function BossStatus() {
   }, [openModal, closeModal])
 
   useEffect(() => {
-    // Busca bosses mortos e pendentes do Firestore em uma única query
-    const bossesQuery = query(
-      collection(db, 'bossSpawns'),
-      where('status', 'in', ['killed', 'pending'])
-    )
+    if (!isOpen) {
+      cleanup()
+      return
+    }
 
-    const unsubscribe = onSnapshot(bossesQuery, async (snapshot) => {
-      const fetchedBosses: Boss[] = []
-      
-      snapshot.forEach((doc) => {
-        fetchedBosses.push({ id: doc.id, ...doc.data() } as Boss)
-      })
+    logger.info('BossStatus', '🎧 Iniciando listener de status dos bosses')
+    initialize()
+    setLoading(false)
 
-      setPendingBosses(fetchedBosses.filter(boss => boss.status === 'pending'))
-      const statuses = await calculateBossStatuses(fetchedBosses)
-      setBossStatuses(statuses)
-      setLoading(false)
-    })
+    return () => {
+      logger.info('BossStatus', '🛑 Desativando listener de status')
+      cleanup()
+    }
+  }, [isOpen, initialize, cleanup])
 
-    return () => unsubscribe()
-  }, [])
-
-  // Atualiza o status a cada minuto
+  // Atualização da UI com intervalo maior
   useEffect(() => {
-    const timer = setInterval(async () => {
-      if (isOpen) {
-        const [killedSnapshot, pendingSnapshot] = await Promise.all([
-          getDocs(query(collection(db, 'bossSpawns'), where('status', '==', 'killed'))),
-          getDocs(query(collection(db, 'bossSpawns'), where('status', '==', 'pending')))
-        ])
+    if (!isOpen) return
 
-        const bosses: Boss[] = []
-        
-        killedSnapshot.forEach((doc) => {
-          bosses.push({ id: doc.id, ...doc.data() } as Boss)
-        })
-        
-        pendingSnapshot.forEach((doc) => {
-          bosses.push({ id: doc.id, ...doc.data() } as Boss)
-        })
+    logger.info('BossStatus', '⏰ Iniciando timer de atualização de UI')
+    
+    const timer = setInterval(() => {
+      updateBossStatuses()
+    }, 30000) // Reduzido para 30s para manter sincronizado com as notificações
 
-        const statuses = await calculateBossStatuses(bosses)
-        setBossStatuses(statuses)
-      }
-    }, 60000)
-
-    return () => clearInterval(timer)
-  }, [isOpen])
-
-  // Usar o hook de notificações
-  useDiscordNotifications(
-    pendingBosses.map((boss: Boss) => ({
-      id: boss.id,
-      name: boss.name,
-      channel: boss.channel,
-      spawnTime: boss.spawnTime,
-      spawnMap: boss.spawnMap || 'Desconhecido',
-      status: boss.status,
-      appearanceStatus: boss.appearanceStatus || 'pending'
-    })),
-    process.env.NEXT_PUBLIC_DISCORD_WEBHOOK_URL || ''
-  )
+    return () => {
+      logger.info('BossStatus', '🛑 Desativando timer de UI')
+      clearInterval(timer)
+    }
+  }, [isOpen, updateBossStatuses])
 
   const getStatusColor = (status: string) => {
     switch (status) {

@@ -26,8 +26,22 @@ export const discordService = {
       timeZone: 'America/Sao_Paulo'
     });
 
+    // Determinar a cor baseada no tempo restante
+    const color = minutes <= 5 ? 0xFF0000 : 0xFFA500; // Vermelho para 5min, laranja para 30min
+
+    // Criar uma mensagem mais chamativa baseada no tempo
+    const urgencyPrefix = minutes <= 5 ? '🚨 **ALERTA DE BOSS URGENTE** 🚨' : '📢 **ALERTA DE BOSS** 📢';
+    const timeMessage = minutes <= 5 
+      ? `⚠️ **ATENÇÃO!** O boss **${boss.name}** nascerá em **${minutes} minutos**!⚠️`
+      : `O boss **${boss.name}** nascerá em **${minutes} minutos**!`;
+
+    // Formatar o horário com a cor correspondente
+    const formattedTime = minutes <= 5
+      ? `**\`${timeFormatter.format(spawnTime)}\`** 🔴`
+      : `**\`${timeFormatter.format(spawnTime)}\`** 🟡`;
+
     return {
-      content: `@everyone\n🚨 **ALERTA DE BOSS** 🚨\nO boss **${boss.name}** vai nascer em ${minutes} minutos!`,
+      content: `@everyone\n${urgencyPrefix}\n\n${timeMessage}`,
       embeds: [{
         title: "📋 Informações do Boss",
         fields: [
@@ -38,7 +52,7 @@ export const discordService = {
           },
           {
             name: "🗺️ Local",
-            value: boss.spawnMap,
+            value: boss.spawnMap || "Não especificado",
             inline: false
           },
           {
@@ -48,11 +62,15 @@ export const discordService = {
           },
           {
             name: "⏰ Horário de Spawn (GMT-3 BRASIL)",
-            value: timeFormatter.format(spawnTime),
+            value: formattedTime,
             inline: false
           }
         ],
-        color: minutes <= 5 ? 15158332 : 15105570 // Vermelho para 5min, laranja para outros
+        color: color,
+        footer: {
+          text: "Guild Phoenix © Since 2023"
+        },
+        timestamp: new Date().toISOString()
       }]
     };
   }

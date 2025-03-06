@@ -8,6 +8,10 @@ export interface DiscordWebhookPayload {
       inline?: boolean;
     }[];
     color?: number;
+    footer?: {
+      text: string;
+    };
+    timestamp?: string;
   }[];
 }
 

@@ -18,22 +18,26 @@ import {
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import toast from 'react-hot-toast'
+import { logger } from '@/lib/logger'
 
 interface AddBossButtonProps {
-  onConfirm: (boss: Boss) => void
+  onConfirm: (boss: Boss) => Promise<void>
   onReject: () => void
 }
 
 export default function AddBossButton({ onConfirm, onReject }: AddBossButtonProps) {
   const [pendingBosses, setPendingBosses] = useState<Boss[]>([])
   const [showSummary, setShowSummary] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
 
   const createEmptyBoss = (): Boss => {
     const now = new Date()
     const spawnTime = addMinutes(now, 5)
     
+    const uniqueId = `boss-${Date.now()}-${pendingBosses.length + 1}-${Math.random().toString(36).substr(2, 9)}`;
+    
     return {
-      id: `boss-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: uniqueId,
       name: bossData[0].name,
       spawnMap: bossData[0].spawnMap,
       channel: '',
@@ -80,15 +84,20 @@ export default function AddBossButton({ onConfirm, onReject }: AddBossButtonProp
     } : b))
   }
 
-  const handleConfirmAndAdd = (boss: Boss) => {
+  const handleConfirmAndAdd = async (boss: Boss) => {
     // Verificar se o canal é válido
     if (!boss.channel) {
       toast.error('Por favor, insira um canal válido antes de confirmar.')
       return
     }
 
-    onConfirm(boss)
-    setPendingBosses(prev => prev.filter(b => b.id !== boss.id))
+    try {
+      await onConfirm(boss)
+      setPendingBosses(prev => prev.filter(b => b.id !== boss.id))
+    } catch (error) {
+      logger.error('AddBossButton', 'Erro ao confirmar boss individual', { error, boss })
+      toast.error('Erro ao confirmar o boss. Tente novamente.')
+    }
   }
 
   const handleRejectSingle = (bossId: string) => {
@@ -98,53 +107,86 @@ export default function AddBossButton({ onConfirm, onReject }: AddBossButtonProp
     }
   }
 
-  const handleConfirmAll = () => {
-    // Primeiro, verificar duplicatas
-    const duplicateGroups = pendingBosses.reduce((acc, boss) => {
-      const key = `${boss.name}-${boss.channel || 'sem-canal'}`
-      if (!acc[key]) {
-        acc[key] = []
+  const handleConfirmAll = async () => {
+    if (isProcessing) return;
+    setIsProcessing(true);
+
+    try {
+      // Primeiro, verificar duplicatas
+      const duplicateGroups = pendingBosses.reduce((acc, boss) => {
+        const key = `${boss.name}-${boss.channel || 'sem-canal'}`
+        if (!acc[key]) {
+          acc[key] = []
+        }
+        acc[key].push(boss)
+        return acc
+      }, {} as Record<string, Boss[]>)
+
+      const duplicates = Object.entries(duplicateGroups)
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        .filter(([_, bosses]) => bosses.length > 1)
+        .map(([key]) => {
+          const [name, channel] = key.split('-')
+          return channel === 'sem-canal' 
+            ? `${name} (sem canal definido)`
+            : `${name} no ${channel}`
+        })
+
+      if (duplicates.length > 0) {
+        toast.error(`Existem bosses duplicados: ${duplicates.join(', ')}. Por favor, remova as duplicatas antes de confirmar.`)
+        return
       }
-      acc[key].push(boss)
-      return acc
-    }, {} as Record<string, Boss[]>)
 
-    const duplicates = Object.entries(duplicateGroups)
-      .filter(([_, bosses]) => bosses.length > 1)
-      .map(([key]) => {
-        const [name, channel] = key.split('-')
-        return channel === 'sem-canal' 
-          ? `${name} (sem canal definido)`
-          : `${name} no ${channel}`
-      })
+      // Depois, verificar canais inválidos
+      const invalidBosses = pendingBosses.filter(boss => !boss.channel)
+      if (invalidBosses.length > 0) {
+        const invalidNames = invalidBosses.map(b => b.name).join(', ')
+        toast.error(`Os seguintes bosses não têm canal definido: ${invalidNames}`)
+        return
+      }
 
-    if (duplicates.length > 0) {
-      toast.error(`Existem bosses duplicados: ${duplicates.join(', ')}. Por favor, remova as duplicatas antes de confirmar.`)
-      return
+      // Se passou nas validações, confirmar todos
+      const promises = pendingBosses.map(async (boss) => {
+        try {
+          // Adicionar um pequeno delay entre cada boss para garantir que o Firestore processe na ordem
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Garantir que o tempo capturado seja mantido
+          await onConfirm({
+            ...boss,
+            capturedTime: boss.capturedTime || '0h 0m'
+          })
+          logger.info('AddBossButton', 'Boss confirmado com sucesso', { boss })
+          return true;
+        } catch (error) {
+          logger.error('AddBossButton', 'Erro ao confirmar boss', { error, boss })
+          toast.error(`Erro ao confirmar o boss ${boss.name}. Tente novamente.`)
+          return false;
+        }
+      });
+
+      // Aguardar todos os bosses serem confirmados
+      const results = await Promise.all(promises);
+      
+      // Verificar se todos os bosses foram confirmados com sucesso
+      if (results.every(result => result === true)) {
+        setPendingBosses([])
+        setShowSummary(false)
+        toast.success('Todos os bosses foram confirmados com sucesso!')
+      } else {
+        toast.error('Alguns bosses não puderam ser confirmados. Verifique e tente novamente.')
+      }
+    } catch (error) {
+      logger.error('AddBossButton', 'Erro ao confirmar todos os bosses', { error })
+      toast.error('Erro ao confirmar os bosses. Tente novamente.')
+    } finally {
+      setIsProcessing(false)
     }
-
-    // Depois, verificar canais inválidos
-    const invalidBosses = pendingBosses.filter(boss => !boss.channel)
-    if (invalidBosses.length > 0) {
-      const invalidNames = invalidBosses.map(b => b.name).join(', ')
-      toast.error(`Os seguintes bosses não têm canal definido: ${invalidNames}`)
-      return
-    }
-
-    // Se passou nas validações, confirmar todos
-    pendingBosses.forEach(boss => {
-      // Garantir que o tempo capturado seja mantido
-      onConfirm({
-        ...boss,
-        capturedTime: boss.capturedTime || '0h 0m' // Manter o tempo capturado original
-      })
-    })
-    setPendingBosses([])
-    setShowSummary(false)
   }
 
   const handleRejectAll = () => {
     setPendingBosses([])
+    setShowSummary(false)
     onReject()
   }
 

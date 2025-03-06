@@ -27,36 +27,39 @@ export async function logBossAction(
   details?: LogDetails
 ) {
   try {
-    const logRef = collection(db, 'bossLogs')
-    
-    // Criar objeto base do log
+    logger.info('LogActions', '📝 Iniciando registro de log', {
+      action,
+      boss: bossInfo.name,
+      channel: bossInfo.channel
+    });
+
     const logData = {
       userId,
       userName,
       action,
       bossId: bossInfo.id,
       bossName: bossInfo.name,
-      channel: bossInfo.channel,
-      timestamp: serverTimestamp()
-    }
+      bossChannel: bossInfo.channel,
+      timestamp: serverTimestamp(),
+      details: details || {}
+    };
 
-    // Adicionar details apenas se existir
-    if (details) {
-      Object.assign(logData, { details })
-    }
+    const docRef = await addDoc(collection(db, 'bossLogs'), logData);
 
-    const docRef = await addDoc(logRef, logData)
-    
-    logger.info('logBossAction', 'Log saved successfully', { logId: docRef.id })
-    logger.info('logBossAction', 'Action logged successfully', {
+    logger.info('LogActions', '✅ Log registrado com sucesso', {
       action,
-      bossName: bossInfo.name,
-      userId,
+      boss: bossInfo.name,
+      channel: bossInfo.channel,
       logId: docRef.id
-    })
-    return docRef.id
+    });
+
+    return docRef;
   } catch (error) {
-    logger.error('logBossAction', 'Error saving log', { error })
-    logger.error('logBossAction', 'Error logging action', { error })
+    logger.error('LogActions', 'Erro ao registrar log', {
+      error,
+      action,
+      boss: bossInfo.name
+    });
+    throw error;
   }
 }
