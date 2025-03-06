@@ -37,3 +37,6 @@ next-env.d.ts
 
 # Firebase Service Account
 service-account.json
+
+# Scripts
+/scripts
