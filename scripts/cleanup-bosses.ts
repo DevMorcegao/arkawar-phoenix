@@ -17,7 +17,7 @@
  * - Bosses killed há mais de 48 horas
  * - Bosses deleted há mais de 48 horas
  * - Bosses noshow há mais de 48 horas
- */
+
 
 import { initializeApp, cert, ServiceAccount, App } from 'firebase-admin/app';
 import { getFirestore, Firestore } from 'firebase-admin/firestore';
@@ -116,3 +116,4 @@ if (require.main === module) {
       process.exit(1);
     });
 } 
+ */

@@ -1,3 +1,11 @@
+/**
+ * SCRIPT COMENTADO - NÃO ESTÁ EM USO
+ * 
+ * Este script verifica a contagem de bosses no Firestore.
+ * Para usar, descomente o código abaixo.
+ */
+
+/*
 import * as dotenv from 'dotenv';
 import { resolve } from 'path';
 
@@ -61,4 +69,5 @@ async function checkBossCounts() {
 }
 
 // Executar a verificação
-checkBossCounts(); 
+checkBossCounts();
+*/ 

@@ -1,3 +1,12 @@
+/**
+ * SCRIPT COMENTADO - NÃO ESTÁ EM USO
+ * 
+ * Este script verifica os bosses no Firestore.
+ * Para usar, descomente o código abaixo.
+
+
+
+
 // import { initializeApp, cert } from 'firebase-admin/app';
 // import { getFirestore } from 'firebase-admin/firestore';
 // import axios from 'axios';
@@ -138,3 +147,5 @@
 // }
 
 // checkBosses(); 
+
+*/
