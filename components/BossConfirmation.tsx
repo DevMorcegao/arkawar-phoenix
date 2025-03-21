@@ -56,7 +56,7 @@ const BossConfirmation: React.FC<BossConfirmationProps> = ({ boss, onConfirm, on
     const numericValue = parseInt(value, 10)
 
     if (!validChannels.includes(numericValue)) {
-      setChannelError('Canal inválido. Use: 1-6 ou 9-13')
+      setChannelError('Canal inválido. Use: 1-6, 9 ou 10-13')
       return false
     }
 
@@ -145,7 +145,7 @@ const BossConfirmation: React.FC<BossConfirmationProps> = ({ boss, onConfirm, on
 
   const handleConfirm = () => {
     if (!validateChannel(channel)) {
-      toast.error('Canal inválido. Use: 1-6 ou 9-13')
+      toast.error('Canal inválido. Use: 1-6, 9 ou 10-13')
       return
     }
     
