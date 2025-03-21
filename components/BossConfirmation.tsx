@@ -44,7 +44,7 @@ const BossConfirmation: React.FC<BossConfirmationProps> = ({ boss, onConfirm, on
     })
   }, [boss])
 
-  const validChannels = [1, 2, 3, 4, 5, 9, 10, 11, 12, 13]
+  const validChannels = [1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13]
 
   // Função para validar o canal
   const validateChannel = (value: string): boolean => {
@@ -56,7 +56,7 @@ const BossConfirmation: React.FC<BossConfirmationProps> = ({ boss, onConfirm, on
     const numericValue = parseInt(value, 10)
 
     if (!validChannels.includes(numericValue)) {
-      setChannelError('Canal inválido. Use: 1-5 ou 9-13')
+      setChannelError('Canal inválido. Use: 1-6 ou 9-13')
       return false
     }
 
@@ -145,7 +145,7 @@ const BossConfirmation: React.FC<BossConfirmationProps> = ({ boss, onConfirm, on
 
   const handleConfirm = () => {
     if (!validateChannel(channel)) {
-      toast.error('Canal inválido. Use: 1-5 ou 9-13')
+      toast.error('Canal inválido. Use: 1-6 ou 9-13')
       return
     }
     

@@ -90,7 +90,7 @@ export async function calculateBossStatuses(bosses: Boss[]): Promise<BossStatusI
 
   // Adiciona status 'available' para canais sem boss killed ou pending
   const channels = ['Channel 1', 'Channel 2', 'Channel 3', 'Channel 4', 'Channel 5', 
-                   'Channel 9', 'Channel 10', 'Channel 11', 'Channel 12', 'Channel 13']
+                   'Channel 6', 'Channel 9', 'Channel 10', 'Channel 11', 'Channel 12', 'Channel 13']
 
   for (const bossName of Object.keys(bossRespawnData)) {
     for (const channel of channels) {

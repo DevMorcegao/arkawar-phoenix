@@ -33,7 +33,7 @@ export default function BossStatus() {
 
   // Lista de canais disponíveis
   const channels = ['Channel 1', 'Channel 2', 'Channel 3', 'Channel 4', 'Channel 5', 
-                   'Channel 9', 'Channel 10', 'Channel 11', 'Channel 12', 'Channel 13']
+                   'Channel 6', 'Channel 9', 'Channel 10', 'Channel 11', 'Channel 12', 'Channel 13']
 
   // Lista única de nomes de bosses
   const uniqueBossNames = Array.from(new Set(bossStatuses.map(boss => boss.name))).sort()
